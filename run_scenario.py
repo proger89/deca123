@@ -190,7 +190,7 @@ def command_architecture_verify(inside_container: bool, tag: str) -> int:
 
 
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry"}:
+    if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry", "rules,ledger,deadlines"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -223,6 +223,8 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         test_paths.append("tests/sensing")
     if checks == "geometry":
         test_paths.append("tests/geometry")
+    if checks == "rules,ledger,deadlines":
+        test_paths.append("tests/scheduling")
     commands = [
         [sys.executable, "-m", "compileall", "-q", "src", "tools", "run_scenario.py"],
         [sys.executable, "-m", "ruff", "check", "src", "tests", "tools", "run_scenario.py"],
@@ -268,6 +270,10 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         code = run_checked(command)
         if code != 0:
             return code
+    if checks == "rules,ledger,deadlines":
+        from tools.scheduling_checks import run_checks
+
+        emit(run_checks())
     emit({"checks": checks, "result": "pass"})
     return 0
 

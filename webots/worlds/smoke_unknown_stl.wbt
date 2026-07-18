@@ -137,6 +137,49 @@ Robot {
       maxRange 2
       noise 0
     }
+    RangeFinder {
+      translation -3.5 0.8 -0.8
+      rotation 0 1 0 -1.5708
+      name "rangefinder_left"
+      fieldOfView 0.7
+      width 64
+      height 64
+      minRange 0.05
+      maxRange 2
+      noise 0
+    }
+    RangeFinder {
+      translation -3.5 0.8 0.8
+      rotation 0 1 0 1.5708
+      name "rangefinder_right"
+      fieldOfView 0.7
+      width 64
+      height 64
+      minRange 0.05
+      maxRange 2
+      noise 0
+    }
+    RangeFinder {
+      translation -4.2 0.8 0
+      name "rangefinder_front"
+      fieldOfView 0.7
+      width 64
+      height 64
+      minRange 0.05
+      maxRange 2
+      noise 0
+    }
+    RangeFinder {
+      translation -2.8 0.8 0
+      rotation 0 1 0 3.14159
+      name "rangefinder_rear"
+      fieldOfView 0.7
+      width 64
+      height 64
+      minRange 0.05
+      maxRange 2
+      noise 0
+    }
     DistanceSensor {
       translation -3.8 0.75 0
       name "photoeye_entry"
@@ -153,6 +196,35 @@ Robot {
     Emitter {
       name "runtime_events_emitter"
       channel 17
+    }
+    HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 0 1
+        anchor -3.5 0.58 -0.42
+      }
+      device [
+        RotationalMotor {
+          name "belt_encoder_motor"
+          maxVelocity 2
+          maxTorque 2
+          sound ""
+        }
+        PositionSensor {
+          name "belt_encoder"
+        }
+      ]
+      endPoint Solid {
+        translation -3.5 0.58 -0.42
+        name "encoder_wheel"
+        children [
+          Shape {
+            appearance PBRAppearance { baseColor 0.25 0.25 0.28 roughness 0.8 }
+            geometry Cylinder { height 0.04 radius 0.06 }
+          }
+        ]
+        boundingObject Cylinder { height 0.04 radius 0.06 }
+        physics Physics { density -1 mass 0.1 }
+      }
     }
     HingeJoint {
       jointParameters HingeJointParameters {

@@ -11,9 +11,11 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_IMAGE = "deca123-sim:dev"
+sys.path.insert(0, str(ROOT / "src"))
 
 
 def emit(payload: dict[str, object]) -> None:
@@ -188,7 +190,7 @@ def command_architecture_verify(inside_container: bool, tag: str) -> int:
 
 
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks not in {"bootstrap", "contract", "architecture"}:
+    if checks not in {"bootstrap", "contract", "architecture", "sensing"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -213,17 +215,19 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         )
 
     test_paths = ["tests/smoke", "tests/simulation"]
-    if checks in {"contract", "architecture"}:
+    if checks in {"contract", "architecture", "sensing"}:
         test_paths.append("tests/contract")
-    if checks == "architecture":
+    if checks in {"architecture", "sensing"}:
         test_paths.append("tests/architecture")
+    if checks == "sensing":
+        test_paths.append("tests/sensing")
     commands = [
         [sys.executable, "-m", "compileall", "-q", "src", "tools", "run_scenario.py"],
         [sys.executable, "-m", "ruff", "check", "src", "tests", "tools", "run_scenario.py"],
         [sys.executable, "-m", "mypy", "src", "run_scenario.py", "tools"],
         [sys.executable, "-m", "pytest", *test_paths, "-q"],
     ]
-    if checks in {"contract", "architecture"}:
+    if checks in {"contract", "architecture", "sensing"}:
         commands.extend(
             [
                 [sys.executable, "tools/render_acceptance_matrix.py", "--check"],
@@ -236,7 +240,7 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
                 ],
             ]
         )
-    if checks == "architecture":
+    if checks in {"architecture", "sensing"}:
         commands.extend(
             [
                 [
@@ -247,6 +251,15 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
                     "--inside-container",
                 ],
                 [sys.executable, "tools/leak_test.py", "--with-canary"],
+            ]
+        )
+    if checks == "sensing":
+        commands.append(
+            [
+                sys.executable,
+                "tools/verify_calibration.py",
+                "--config",
+                "config/calibration/calibration.yaml",
             ]
         )
     for command in commands:
@@ -438,6 +451,140 @@ def command_verify_bundle(bundle_value: str) -> int:
     return 0
 
 
+def command_suite(profile: str, seed: int, output_value: str, tag: str) -> int:
+    if profile != "sensing":
+        emit({"error": "suite profile is not implemented yet", "profile": profile})
+        return 2
+    from safesort.runtime.sensing import FrameBundle, ViewFrame, ViewHealth, assemble_frame_bundle
+    from tools.smoke_cycle import atomic_json, load_object
+    from tools.verify_calibration import CalibrationError, validate_calibration
+
+    output = _workspace_output(output_value)
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True)
+    if command_image_build(tag) != 0:
+        return 1
+    hashes: list[str] = []
+    health_sequences: list[list[str]] = []
+    spreads: list[int] = []
+    first_bundle: dict[str, Any] | None = None
+    smoke_pass = True
+    for index in range(1, 4):
+        target = output / "replays" / f"run-{index}"
+        code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, target, tag, canary=False)
+        bundle = load_object(target / "frame-bundle.json") if (target / "frame-bundle.json").is_file() else {}
+        result = _read_result_status(target)
+        smoke_pass = smoke_pass and code == 0 and result == "SUCCESS" and bundle.get("valid") is True
+        hashes.append(str(bundle.get("semantic_hash")))
+        health_sequences.append([str(value) for value in bundle.get("health_sequence", [])])
+        spreads.append(int(bundle.get("timestamp_spread_ticks", -1)))
+        if first_bundle is None:
+            first_bundle = bundle
+    if first_bundle is None:
+        emit({"error": "no frame bundle produced", "result": "fail"})
+        return 1
+    frame_rows = first_bundle.get("frames", [])
+    if not isinstance(frame_rows, list):
+        emit({"error": "invalid frame rows", "result": "fail"})
+        return 1
+    frames = tuple(
+        ViewFrame(
+            name=str(row["name"]),
+            tick=int(row["tick"]),
+            encoder_tick=int(row["encoder_tick"]),
+            sample_count=int(row["sample_count"]),
+            finite_count=int(row["finite_count"]),
+            depth_hash=str(row["depth_hash"]),
+            health=ViewHealth(str(row["health"])),
+            motion_compensation_mm=float(row["motion_compensation_mm"]),
+        )
+        for row in frame_rows
+        if isinstance(row, dict)
+    )
+    enabled = tuple(str(value) for value in first_bundle["enabled_views"])
+    bundle_tick = int(first_bundle["tick"])
+    encoder_tick = int(first_bundle["encoder_tick"])
+    encoder_position = float(first_bundle["encoder_position_rad"])
+    calibration_digest = str(first_bundle["calibration_hash"])
+
+    def canary_bundle(canary_frames: tuple[ViewFrame, ...]) -> FrameBundle:
+        return assemble_frame_bundle(
+            canary_frames,
+            enabled_views=enabled,
+            tick=bundle_tick,
+            encoder_tick=encoder_tick,
+            encoder_position_rad=encoder_position,
+            calibration_hash=calibration_digest,
+            seed=seed,
+        )
+
+    missing = canary_bundle(frames[:-1])
+    frozen_first = ViewFrame(
+        name=frames[0].name,
+        tick=frames[0].tick,
+        encoder_tick=frames[0].encoder_tick,
+        sample_count=frames[0].sample_count,
+        finite_count=frames[0].finite_count,
+        depth_hash=frames[0].depth_hash,
+        health=ViewHealth.FROZEN,
+        motion_compensation_mm=frames[0].motion_compensation_mm,
+    )
+    frozen_frames = (frozen_first, *frames[1:])
+    late_second = ViewFrame(
+        name=frames[1].name,
+        tick=frames[1].tick - 1,
+        encoder_tick=frames[1].encoder_tick,
+        sample_count=frames[1].sample_count,
+        finite_count=frames[1].finite_count,
+        depth_hash=frames[1].depth_hash,
+        health=ViewHealth.LATE,
+        motion_compensation_mm=frames[1].motion_compensation_mm,
+    )
+    late = canary_bundle((frames[0], late_second, *frames[2:]))
+    frozen = canary_bundle(frozen_frames)
+    calibration_path = ROOT / "config/calibration/calibration.yaml"
+    mismatch_rejected = False
+    try:
+        validate_calibration(calibration_path, expected_hash="0" * 64)
+    except CalibrationError:
+        mismatch_rejected = True
+    canaries = {
+        "calibration_hash_mismatch_rejected": mismatch_rejected,
+        "frozen_invalid": not frozen.valid,
+        "frozen_reasons": list(frozen.invalid_reasons),
+        "late_invalid": not late.valid,
+        "late_reasons": list(late.invalid_reasons),
+        "missing_invalid": not missing.valid,
+        "missing_reasons": list(missing.invalid_reasons),
+    }
+    atomic_json(output / "sensing-canaries.json", canaries)
+    identical = len(set(hashes)) == 1 and all(sequence == health_sequences[0] for sequence in health_sequences)
+    passed = (
+        smoke_pass
+        and identical
+        and spreads == [0, 0, 0]
+        and all(
+            bool(value)
+            for key, value in canaries.items()
+            if key.endswith(("rejected", "invalid"))
+        )
+    )
+    summary: dict[str, object] = {
+        "bundle_hashes": hashes,
+        "calibration_hash": first_bundle["calibration_hash"],
+        "canaries": canaries,
+        "health_sequences": health_sequences,
+        "noise": {"depth_sigma_mm": 0.5, "seed": seed},
+        "result": "pass" if passed else "fail",
+        "smoke_regression": smoke_pass,
+        "timestamp_spreads": spreads,
+    }
+    atomic_json(output / "sensing-summary.json", summary)
+    emit(summary)
+    return 0 if passed else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -484,6 +631,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     bundle_verify_parser = subparsers.add_parser("verify")
     bundle_verify_parser.add_argument("--bundle", required=True)
+
+    suite_parser = subparsers.add_parser("suite")
+    suite_parser.add_argument("--profile", required=True)
+    suite_parser.add_argument("--seed", type=int, required=True)
+    suite_parser.add_argument("--output", required=True)
+    suite_parser.add_argument("--tag", default=DEFAULT_IMAGE)
     return parser
 
 
@@ -513,6 +666,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_replay(str(args.bundle), int(args.repeat), str(args.tag))
         if args.command == "verify":
             return command_verify_bundle(str(args.bundle))
+        if args.command == "suite":
+            return command_suite(str(args.profile), int(args.seed), str(args.output), str(args.tag))
     except RuntimeError as error:
         emit({"error": str(error)})
         return 1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -12,26 +13,39 @@ from controller import Robot
 
 from safesort.contracts.events import DecisionEvent, PhysicalRoute
 from safesort.runtime.engine import RouteRequest, RuntimeEngine, SensorBundle
+from safesort.runtime.sensing import ViewFrame, ViewHealth, assemble_frame_bundle
+
+PRIMARY_VIEWS = ("top", "left", "right", "front", "rear")
 
 
 class RuntimeController:
     def __init__(self) -> None:
         self.robot = Robot()
         self.timestep = int(self.robot.getBasicTimeStep())
-        self.rangefinder = self.robot.getDevice("rangefinder_top")
+        self.rangefinders = {name: self.robot.getDevice(f"rangefinder_{name}") for name in PRIMARY_VIEWS}
+        self.rangefinder = self.rangefinders["top"]
         self.entry_sensor = self.robot.getDevice("photoeye_entry")
         self.exit_sensor = self.robot.getDevice("b_exit_sensor")
         self.gate_motor = self.robot.getDevice("provisional_gate_motor")
         self.gate_position = self.robot.getDevice("provisional_gate_position")
+        self.belt_motor = self.robot.getDevice("belt_encoder_motor")
+        self.belt_encoder = self.robot.getDevice("belt_encoder")
         self.event_emitter = self.robot.getDevice("runtime_events_emitter")
-        self.rangefinder.enable(self.timestep)
+        for sensor in self.rangefinders.values():
+            sensor.enable(self.timestep)
         self.entry_sensor.enable(self.timestep)
         self.exit_sensor.enable(self.timestep)
         self.gate_position.enable(self.timestep)
+        self.belt_encoder.enable(self.timestep)
+        self.belt_motor.setPosition(float("inf"))
+        self.belt_motor.setVelocity(1.0)
         self.output = Path(os.environ.get("SAFESORT_OUTPUT_DIR", "/output"))
         self.output.mkdir(parents=True, exist_ok=True)
         self.trace: list[dict[str, Any]] = []
         self.tick = 0
+        self.seed = int(os.environ.get("SAFESORT_SEED", "0"))
+        self.calibration_path = Path(os.environ.get("SAFESORT_CALIBRATION", "/app/config/calibration/calibration.yaml"))
+        self.calibration_hash = hashlib.sha256(self.calibration_path.read_bytes()).hexdigest()
 
     def record(self, event: dict[str, Any]) -> None:
         self.trace.append(event)
@@ -109,6 +123,59 @@ class RuntimeController:
             devices_healthy=True,
         )
 
+    def capture_frame_bundle(self) -> None:
+        frames: list[ViewFrame] = []
+        encoder_position = float(self.belt_encoder.getValue())
+        for view_index, name in enumerate(PRIMARY_VIEWS):
+            image = self.rangefinders[name].getRangeImage()
+            values: list[float] = []
+            for pixel_index, raw_value in enumerate(image):
+                value = float(raw_value)
+                if not math.isfinite(value):
+                    continue
+                noise_unit = ((self.seed * 7919 + view_index * 104729 + pixel_index * 17) % 2001 - 1000) / 1000.0
+                values.append(round(value + noise_unit * 0.0005, 6))
+            encoded = json.dumps(values, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+            health = ViewHealth.HEALTHY if values else ViewHealth.EMPTY
+            frames.append(
+                ViewFrame(
+                    name=name,
+                    tick=self.tick,
+                    encoder_tick=self.tick,
+                    sample_count=len(image),
+                    finite_count=len(values),
+                    depth_hash=hashlib.sha256(encoded).hexdigest(),
+                    health=health,
+                    motion_compensation_mm=0.0,
+                )
+            )
+        bundle = assemble_frame_bundle(
+            tuple(frames),
+            enabled_views=PRIMARY_VIEWS,
+            tick=self.tick,
+            encoder_tick=self.tick,
+            encoder_position_rad=round(encoder_position, 9),
+            calibration_hash=self.calibration_hash,
+            seed=self.seed,
+        )
+        payload = bundle.as_dict()
+        target = self.output / "frame-bundle.json"
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(target)
+        self.record(
+            {
+                "calibration_hash": self.calibration_hash,
+                "encoder_tick": self.tick,
+                "event_type": "frame_bundle",
+                "health_sequence": payload["health_sequence"],
+                "semantic_hash": payload["semantic_hash"],
+                "tick": self.tick,
+                "timestamp_spread_ticks": payload["timestamp_spread_ticks"],
+                "valid": payload["valid"],
+            }
+        )
+
     def emit_committed(self, event: DecisionEvent) -> None:
         self.record(event.as_dict())
         payload = json.dumps(event.as_dict(), separators=(",", ":"), sort_keys=True)
@@ -119,6 +186,8 @@ class RuntimeController:
         disable_exit = os.environ.get("SAFESORT_DISABLE_EXIT") == "1"
         while self.robot.step(self.timestep) != -1:
             self.tick += 1
+            if self.tick == 5:
+                self.capture_frame_bundle()
             if request is None and self.tick >= 5:
                 bundle = self.measure()
                 if bundle is not None:

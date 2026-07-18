@@ -187,6 +187,15 @@ def write_manifest(output: Path, scenario: str, seed: int, exit_code: int, *, ca
         "seed": seed,
         "semantic_trace_hash": semantic_trace_hash(trace_path) if trace_path.is_file() else None,
     }
+    frame_bundle = output / "frame-bundle.json"
+    if frame_bundle.is_file():
+        calibration = load_object(ROOT / "config/calibration/calibration.yaml")
+        payload["sensing"] = {
+            "calibration_hash": load_object(frame_bundle)["calibration_hash"],
+            "motion_compensation": calibration["motion_compensation"],
+            "noise_model": calibration["noise_model"],
+            "seed": seed,
+        }
     atomic_json(output / "manifest.json", payload)
     return payload
 

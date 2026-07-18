@@ -18,8 +18,14 @@
       "controller": "webots/controllers/runtime_controller/runtime_controller.py",
       "devices": [
         "RangeFinder:rangefinder_top",
+        "RangeFinder:rangefinder_left",
+        "RangeFinder:rangefinder_right",
+        "RangeFinder:rangefinder_front",
+        "RangeFinder:rangefinder_rear",
         "DistanceSensor:photoeye_entry",
         "DistanceSensor:b_exit_sensor",
+        "RotationalMotor:belt_encoder_motor",
+        "PositionSensor:belt_encoder",
         "RotationalMotor:provisional_gate_motor",
         "PositionSensor:provisional_gate_position",
         "Emitter:runtime_events_emitter"

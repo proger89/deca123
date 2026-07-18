@@ -10,7 +10,7 @@ from typing import cast
 
 
 def _number(value: object) -> float:
-    if not isinstance(value, (int, float)):
+    if not isinstance(value, int | float):
         raise RuntimeError("proxy metric must be numeric")
     return float(value)
 

@@ -512,9 +512,15 @@ def command_replay(bundle_value: str, repeat: int, tag: str) -> int:
 
 
 def command_verify_bundle(bundle_value: str) -> int:
+    bundle = _workspace_output(bundle_value)
+    if (bundle / "reliability-summary.json").is_file():
+        from tools.reliability_suite import verify_reliability_bundle
+
+        summary = verify_reliability_bundle(bundle)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
     from tools.smoke_cycle import SmokeEvidenceError, verify_bundle
 
-    bundle = _workspace_output(bundle_value)
     try:
         summary = verify_bundle(bundle)
     except SmokeEvidenceError as error:
@@ -555,7 +561,7 @@ def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int
 
 
 def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
-    if profile not in {"sensing", "geometry", "uncertainty", "gates"}:
+    if profile not in {"sensing", "geometry", "uncertainty", "gates", "reliability-release"}:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
         return 2
     if profile == "geometry" and inside_container:
@@ -576,6 +582,12 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         from tools.gates_suite import run_gate_suite
 
         summary = run_gate_suite(Path(output_value), seed)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
+    if profile == "reliability-release" and inside_container:
+        from tools.reliability_suite import run_reliability_suite
+
+        summary = run_reliability_suite(Path(output_value), seed)
         emit(summary)
         return 0 if summary["result"] == "pass" else 1
     if inside_container:
@@ -640,6 +652,22 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
         passed = gate_code == 0 and smoke_code == 0 and _read_result_status(smoke_output) == "SUCCESS"
         payload = {"physical_b_smoke": passed, "result": "pass" if passed else "fail"}
+        atomic_json(output / "suite-summary.json", payload)
+        emit(payload)
+        return 0 if passed else 1
+    if profile == "reliability-release":
+        reliability_code = _run_suite_container(profile, seed, output, tag)
+        smoke_output = output / "physical-smoke-regression"
+        smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
+        from tools.reliability_suite import verify_reliability_bundle
+
+        verification = verify_reliability_bundle(output)
+        passed = reliability_code == 0 and smoke_code == 0 and verification["result"] == "pass"
+        payload = {
+            "physical_smoke": _read_result_status(smoke_output),
+            "result": "pass" if passed else "fail",
+            "verification": verification,
+        }
         atomic_json(output / "suite-summary.json", payload)
         emit(payload)
         return 0 if passed else 1
@@ -816,7 +844,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     suite_parser = subparsers.add_parser("suite")
     suite_parser.add_argument("--profile", required=True)
-    suite_parser.add_argument("--seed", type=int, required=True)
+    suite_parser.add_argument("--seed", type=int, default=1101)
     suite_parser.add_argument("--output", required=True)
     suite_parser.add_argument("--tag", default=DEFAULT_IMAGE)
     suite_parser.add_argument("--inside-container", action="store_true")

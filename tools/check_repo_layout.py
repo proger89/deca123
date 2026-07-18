@@ -8,7 +8,18 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED_PARTS = {".git", ".runtime", ".supergoal", "materials", "tmp", "__pycache__"}
+EXCLUDED_PARTS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".runtime",
+    ".supergoal",
+    ".venv",
+    "materials",
+    "tmp",
+    "__pycache__",
+}
 REQUIRED_PATHS = (
     ".dockerignore",
     ".gitattributes",

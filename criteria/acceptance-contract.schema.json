@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/safesort/acceptance-contract.schema.json",
+  "title": "SafeSort acceptance and evidence contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_id", "locked_at", "labels", "rubric_sections", "scenario_families", "requirements", "rules", "outcome_semantics", "fixtures", "sources"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "locked_at": {"type": "string", "format": "date"},
+    "labels": {
+      "type": "array",
+      "const": ["OFFICIAL", "DERIVED", "TEAM_SLO", "STRETCH"]
+    },
+    "rubric_sections": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/rubric_section"}
+    },
+    "scenario_families": {
+      "type": "array",
+      "minItems": 7,
+      "items": {"$ref": "#/$defs/scenario_family"}
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/requirement"}
+    },
+    "rules": {"$ref": "#/$defs/rules"},
+    "outcome_semantics": {"$ref": "#/$defs/outcome_semantics"},
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/fixture"}
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/source"}
+    }
+  },
+  "$defs": {
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "operator", "threshold"],
+      "properties": {
+        "metric": {"type": "string", "minLength": 1},
+        "operator": {"enum": ["=", "<", "<=", ">", ">="]},
+        "threshold": {"type": "number"}
+      }
+    },
+    "rubric_section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "points", "scenario_id", "numeric_gate", "artifact_path", "requirement_ids"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z]{3,4}$"},
+        "title": {"type": "string", "minLength": 1},
+        "points": {"type": "integer", "minimum": 1},
+        "scenario_id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "numeric_gate": {"$ref": "#/$defs/gate"},
+        "artifact_path": {"type": "string", "pattern": "^(submission|evidence|analysis|docs)/"},
+        "requirement_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z]+-[0-9]+$"}}
+      }
+    },
+    "scenario_family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "evidence_owner"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z]{3,4}$"},
+        "name": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "evidence_owner": {"type": "string", "pattern": "^[a-z0-9-]+$"}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "label", "source_ref", "scenario_id", "numeric_gate", "artifact_path"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z]+-[0-9]+$"},
+        "family": {"type": "string", "pattern": "^[A-Z]{3,4}$"},
+        "label": {"enum": ["OFFICIAL", "DERIVED", "TEAM_SLO", "STRETCH"]},
+        "source_ref": {"type": "string", "pattern": "^(official|derived|team|stretch):[a-z0-9-]+$"},
+        "scenario_id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "numeric_gate": {"$ref": "#/$defs/gate"},
+        "artifact_path": {"type": "string", "pattern": "^(submission|evidence|analysis|docs)/"}
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "circularity", "priority"],
+      "properties": {
+        "dimension": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum_exclusive_mm", "maximum_exclusive_mm", "failure_class"],
+          "properties": {
+            "minimum_exclusive_mm": {"type": "array", "const": [10, 10, 10]},
+            "maximum_exclusive_mm": {"type": "array", "const": [450, 320, 320]},
+            "failure_class": {"const": "C"}
+          }
+        },
+        "circularity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["formula", "threshold_exclusive", "qualifying_class", "nonqualifying_class"],
+          "properties": {
+            "formula": {"const": "r_inscribed / R_circumscribed"},
+            "threshold_exclusive": {"const": 0.8},
+            "qualifying_class": {"const": "D"},
+            "nonqualifying_class": {"const": "B"}
+          }
+        },
+        "priority": {"type": "array", "const": ["dimension", "circularity"]}
+      }
+    },
+    "outcome_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["official_classes", "abstain_counts_as_wrong", "safe_reject_is_success", "success_requires_confirmed_exit", "ground_truth_after_runtime_action"],
+      "properties": {
+        "official_classes": {"type": "array", "const": ["B", "C", "D"]},
+        "abstain_counts_as_wrong": {"const": true},
+        "safe_reject_is_success": {"const": false},
+        "success_requires_confirmed_exit": {"const": true},
+        "ground_truth_after_runtime_action": {"const": true}
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "kind", "input", "expected", "evidence_owner"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "family": {"type": "string", "pattern": "^[A-Z]{3,4}$"},
+        "kind": {"enum": ["classification", "private_stl", "flow", "fault", "isolation", "reproducibility", "metric"]},
+        "input": {"type": "object"},
+        "expected": {"type": "object", "minProperties": 1},
+        "evidence_owner": {"type": "string", "pattern": "^[a-z0-9-]+$"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "sha256"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^official:[a-z0-9-]+$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

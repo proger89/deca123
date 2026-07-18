@@ -1,0 +1,8 @@
+{
+  "acceptance_contract_sha256": "50be87416744f31fce0f02860ff0cb19c9a2ea32881719e2831b1ba0dab09a4b",
+  "acceptance_schema_sha256": "469137efda9481470e9a5fa83afc878fa9f175793375b8f179446f9e3af0893e",
+  "clarifications_sha256": "39f74f242f265f4c436a16fe73337408ba798ba59eb96370a1b0f4ba12d25d56",
+  "rendered_matrix_sha256": "804ad793562b27625b5e7593a1b7eb81f3e591df103d355e95ffbee631a9bec9",
+  "schema_version": 1,
+  "source_manifest_sha256": "4744e981264db7f4f8b252013d082b68e120545204beb435b0cfd09358a0dfc1"
+}

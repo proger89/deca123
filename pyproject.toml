@@ -22,6 +22,7 @@ perception = [
 
 [dependency-groups]
 dev = [
+  "jsonschema==4.23.0",
   "mypy==1.16.1",
   "pytest==8.4.1",
   "ruff==0.12.1",
@@ -36,7 +37,7 @@ addopts = "-ra --strict-config --strict-markers"
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 140
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -47,3 +48,6 @@ strict = true
 packages = ["safesort"]
 mypy_path = "src"
 
+[[tool.mypy.overrides]]
+module = "jsonschema"
+ignore_missing_imports = true

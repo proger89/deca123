@@ -78,9 +78,7 @@ SECRET = re.compile(
 def project_files() -> list[Path]:
     files: list[Path] = []
     for directory, child_directories, filenames in os.walk(ROOT):
-        child_directories[:] = [
-            name for name in child_directories if name not in EXCLUDED_PARTS
-        ]
+        child_directories[:] = [name for name in child_directories if name not in EXCLUDED_PARTS]
         files.extend(Path(directory) / filename for filename in filenames)
     return files
 

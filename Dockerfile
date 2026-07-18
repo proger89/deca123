@@ -28,6 +28,9 @@ COPY src ./src
 COPY tests ./tests
 COPY tools ./tools
 COPY config ./config
+COPY assets ./assets
+COPY criteria ./criteria
+COPY docs ./docs
 COPY run_scenario.py ./run_scenario.py
 RUN uv sync --frozen --group dev
 

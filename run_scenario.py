@@ -133,8 +133,36 @@ def command_doctor(require_container: bool, inside_container: bool, tag: str) ->
     )
 
 
+def command_contract_validate(inside_container: bool, tag: str) -> int:
+    if not inside_container:
+        env, _ = docker_environment()
+        return run_checked(
+            [
+                docker_executable(),
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "-e",
+                "SAFESORT_IN_CONTAINER=1",
+                tag,
+                "contract",
+                "validate",
+                "--inside-container",
+            ],
+            env=env,
+        )
+
+    from safesort.contracts.acceptance import validate_contract
+
+    summary = validate_contract()
+    summary["result"] = "pass"
+    emit(summary)
+    return 0
+
+
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks != "bootstrap":
+    if checks not in {"bootstrap", "contract"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -158,12 +186,28 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
             env=env,
         )
 
+    test_paths = ["tests/smoke"]
+    if checks == "contract":
+        test_paths.append("tests/contract")
     commands = [
         [sys.executable, "-m", "compileall", "-q", "src", "tools", "run_scenario.py"],
         [sys.executable, "-m", "ruff", "check", "src", "tests", "tools", "run_scenario.py"],
         [sys.executable, "-m", "mypy", "src", "run_scenario.py", "tools"],
-        [sys.executable, "-m", "pytest", "tests/smoke", "-q"],
+        [sys.executable, "-m", "pytest", *test_paths, "-q"],
     ]
+    if checks == "contract":
+        commands.extend(
+            [
+                [sys.executable, "tools/render_acceptance_matrix.py", "--check"],
+                [
+                    sys.executable,
+                    "run_scenario.py",
+                    "contract",
+                    "validate",
+                    "--inside-container",
+                ],
+            ]
+        )
     for command in commands:
         code = run_checked(command)
         if code != 0:
@@ -186,6 +230,12 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument("--inside-container", action="store_true")
     doctor_parser.add_argument("--tag", default=DEFAULT_IMAGE)
 
+    contract_parser = subparsers.add_parser("contract")
+    contract_subparsers = contract_parser.add_subparsers(dest="contract_command", required=True)
+    validate_parser = contract_subparsers.add_parser("validate")
+    validate_parser.add_argument("--inside-container", action="store_true")
+    validate_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--checks", required=True)
     quality_parser.add_argument("--inside-container", action="store_true")
@@ -202,6 +252,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_doctor(
                 bool(args.require_container), bool(args.inside_container), str(args.tag)
             )
+        if args.command == "contract" and args.contract_command == "validate":
+            return command_contract_validate(bool(args.inside_container), str(args.tag))
         if args.command == "quality":
             return command_quality(str(args.checks), bool(args.inside_container), str(args.tag))
     except RuntimeError as error:

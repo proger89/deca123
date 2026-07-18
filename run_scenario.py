@@ -395,7 +395,38 @@ def command_run(
     tag: str,
     *,
     canary: bool,
+    repeat: int = 1,
 ) -> int:
+    if scenario.endswith("power_loss.yaml"):
+        output = _workspace_output(output_value)
+        if output.exists():
+            shutil.rmtree(output)
+        output.mkdir(parents=True)
+        if command_image_build(tag) != 0:
+            return 1
+        env, _ = docker_environment()
+        return run_checked(
+            [
+                docker_executable(),
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "-v",
+                f"{output}:/output",
+                "--entrypoint",
+                "python",
+                tag,
+                "tools/gate_trials.py",
+                "--repeat",
+                str(repeat),
+                "--seed",
+                str(seed),
+                "--output",
+                "/output",
+            ],
+            env=env,
+        )
     if inside_container:
         return _inside_smoke_run(scenario, seed, Path(output_value), canary=canary)
     output = _workspace_output(output_value)
@@ -490,7 +521,7 @@ def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int
 
 
 def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
-    if profile not in {"sensing", "geometry", "uncertainty"}:
+    if profile not in {"sensing", "geometry", "uncertainty", "gates"}:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
         return 2
     if profile == "geometry" and inside_container:
@@ -507,6 +538,12 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         summary["result"] = "pass"
         emit(summary)
         return 0
+    if profile == "gates" and inside_container:
+        from tools.gates_suite import run_gate_suite
+
+        summary = run_gate_suite(Path(output_value), seed)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
     if inside_container:
         emit({"error": "sensing suite is orchestrated by the host", "result": "fail"})
         return 2
@@ -560,6 +597,15 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
             "smoke_regression": passed,
             "split_audit": split_audit,
         }
+        atomic_json(output / "suite-summary.json", payload)
+        emit(payload)
+        return 0 if passed else 1
+    if profile == "gates":
+        gate_code = _run_suite_container(profile, seed, output, tag)
+        smoke_output = output / "smoke-regression"
+        smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
+        passed = gate_code == 0 and smoke_code == 0 and _read_result_status(smoke_output) == "SUCCESS"
+        payload = {"physical_b_smoke": passed, "result": "pass" if passed else "fail"}
         atomic_json(output / "suite-summary.json", payload)
         emit(payload)
         return 0 if passed else 1
@@ -712,7 +758,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("--scenario", required=True)
-    run_parser.add_argument("--seed", type=int, required=True)
+    run_parser.add_argument("--seed", type=int, default=901)
+    run_parser.add_argument("--repeat", type=int, default=1)
     run_parser.add_argument("--output", required=True)
     run_parser.add_argument("--inside-container", action="store_true")
     run_parser.add_argument("--canary", action="store_true")
@@ -756,6 +803,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bool(args.inside_container),
                 str(args.tag),
                 canary=bool(args.canary),
+                repeat=int(args.repeat),
             )
         if args.command == "replay":
             return command_replay(str(args.bundle), int(args.repeat), str(args.tag))

@@ -1,0 +1,50 @@
+#VRML_SIM R2025a utf8
+
+PROTO FailSafeGate [
+  field SFString name "fail_safe_gate"
+  field SFString rejectRoute "C"
+  field SFVec3f translation 0 0 0
+  field SFFloat springConstant 18
+  field SFFloat dampingConstant 2.35
+  field SFFloat maxTorque 35
+] {
+  Robot {
+    translation IS translation
+    name IS name
+    customData IS rejectRoute
+    children [
+      HingeJoint {
+        jointParameters HingeJointParameters {
+          axis 0 1 0
+          minStop 0
+          maxStop 1.25
+          springConstant IS springConstant
+          dampingConstant IS dampingConstant
+          staticFriction 0.05
+        }
+        device [
+          RotationalMotor {
+            name "permit_motor"
+            minPosition 0
+            maxPosition 1.25
+            maxVelocity 8
+            maxTorque IS maxTorque
+            sound ""
+          }
+          PositionSensor { name "permit_position_confirmed" }
+        ]
+        endPoint Solid {
+          translation 0 0 0
+          children [
+            Shape {
+              appearance PBRAppearance { baseColor 0.95 0.48 0.05 roughness 0.5 }
+              geometry Box { size 0.04 0.30 0.50 }
+            }
+          ]
+          boundingObject Box { size 0.04 0.30 0.50 }
+          physics Physics { density -1 mass 1.0 }
+        }
+      }
+    ]
+  }
+}

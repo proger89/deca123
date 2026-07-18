@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "scenario_id": "two-gate-power-loss-v1",
+  "gates": ["dimension", "shape"],
+  "power_loss": {"motor_torque_nm": 0.0, "trials_per_gate": 100},
+  "safety": {"maximum_return_s": 0.5, "unsafe_b_allowed": 0},
+  "simulation": {"basic_timestep_ms": 32, "network_required": false, "gpu_required": false}
+}

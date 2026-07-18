@@ -65,9 +65,7 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-DEVELOPER_PATH = re.compile(
-    r"(?i)(?:[a-z]:[\\/](?:users|hackatons|sites|new-projects)[\\/]|/home/[^/]+/)"
-)
+DEVELOPER_PATH = re.compile(r"(?i)(?:[a-z]:[\\/](?:users|hackatons|sites|new-projects)[\\/]|/home/[^/]+/)")
 SECRET = re.compile(
     r"(?i)(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
     r"github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|"
@@ -116,9 +114,7 @@ def main() -> int:
     result = {
         "absolute_developer_paths": sorted(absolute_path_hits),
         "missing": missing,
-        "result": "pass"
-        if not (missing or absolute_path_hits or secret_hits or toolchain_errors)
-        else "fail",
+        "result": "pass" if not (missing or absolute_path_hits or secret_hits or toolchain_errors) else "fail",
         "secret_candidates": sorted(secret_hits),
         "toolchain_errors": toolchain_errors,
     }

@@ -25,5 +25,5 @@ jobs:
         run: python tools/check_repo_layout.py
       - name: Build deterministic image
         run: python run_scenario.py image build --tag deca123-sim:dev
-      - name: Run container contract checks
-        run: python run_scenario.py quality --checks contract
+      - name: Run container architecture checks
+        run: python run_scenario.py quality --checks architecture

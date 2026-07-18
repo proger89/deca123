@@ -1,0 +1,44 @@
+{
+  "application_channels": [
+    {
+      "from": "RuntimeController",
+      "to": "EvaluatorSupervisor",
+      "transport": "Emitter->Receiver"
+    }
+  ],
+  "processes": {
+    "EvaluatorSupervisor": {
+      "controller": "webots/controllers/evaluator_supervisor/evaluator_supervisor.py",
+      "devices": [
+        "Receiver:runtime_events_receiver"
+      ],
+      "package": "src/safesort/evaluator"
+    },
+    "RuntimeController": {
+      "controller": "webots/controllers/runtime_controller/runtime_controller.py",
+      "devices": [
+        "RangeFinder:rangefinder_top",
+        "RangeFinder:rangefinder_left",
+        "RangeFinder:rangefinder_right",
+        "RangeFinder:rangefinder_front",
+        "RangeFinder:rangefinder_rear",
+        "DistanceSensor:photoeye_entry",
+        "PositionSensor:belt_encoder",
+        "PositionSensor:dimension_gate_position",
+        "PositionSensor:shape_gate_position",
+        "Emitter:runtime_events_emitter"
+      ],
+      "package": "src/safesort/runtime"
+    }
+  },
+  "runtime_forbidden": [
+    "Supervisor",
+    "Receiver",
+    "safesort.evaluator",
+    "oracle-data",
+    "source-model",
+    "reverse-application-channel"
+  ],
+  "schema_version": 1,
+  "shared_package": "src/safesort/contracts"
+}

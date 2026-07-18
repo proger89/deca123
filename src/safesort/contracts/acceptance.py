@@ -70,10 +70,7 @@ def classify_official(dimensions_mm: Sequence[float], circularity_k: float) -> s
         raise ValueError("dimensions_mm must contain length, width and height")
     minimum = (10.0, 10.0, 10.0)
     maximum = (450.0, 320.0, 320.0)
-    if any(
-        not (lower < float(value) < upper)
-        for value, lower, upper in zip(dimensions_mm, minimum, maximum, strict=True)
-    ):
+    if any(not (lower < float(value) < upper) for value, lower, upper in zip(dimensions_mm, minimum, maximum, strict=True)):
         return "C"
     return "D" if circularity_k > 0.8 else "B"
 
@@ -118,9 +115,7 @@ def semantic_errors(data: JsonObject, *, root: Path = ROOT) -> list[str]:
     if len(requirement_ids) != len(set(requirement_ids)):
         errors.append("semantic:duplicate requirement ID")
     assigned_ids = [
-        str(requirement_id)
-        for section in sections
-        for requirement_id in cast(list[object], section.get("requirement_ids", []))
+        str(requirement_id) for section in sections for requirement_id in cast(list[object], section.get("requirement_ids", []))
     ]
     if sorted(assigned_ids) != sorted(requirement_ids):
         errors.append("semantic:rubric mapping must assign every requirement exactly once")
@@ -133,9 +128,7 @@ def semantic_errors(data: JsonObject, *, root: Path = ROOT) -> list[str]:
         observed_labels.add(label)
         expected_prefix = LABEL_PREFIX.get(label)
         if expected_prefix is None or not source_ref.startswith(expected_prefix):
-            errors.append(
-                f"semantic:{requirement_id} label {label} contradicts source {source_ref}"
-            )
+            errors.append(f"semantic:{requirement_id} label {label} contradicts source {source_ref}")
         if str(requirement.get("family", "")) not in family_ids:
             errors.append(f"semantic:{requirement_id} references an unknown family")
         if not str(requirement.get("scenario_id", "")):
@@ -167,9 +160,7 @@ def semantic_errors(data: JsonObject, *, root: Path = ROOT) -> list[str]:
             continue
         inputs = cast(JsonObject, fixture.get("input", {}))
         expected = cast(JsonObject, fixture.get("expected", {}))
-        actual = classify_official(
-            cast(list[float], inputs.get("dimensions_mm", [])), float(inputs.get("k", 0.0))
-        )
+        actual = classify_official(cast(list[float], inputs.get("dimensions_mm", [])), float(inputs.get("k", 0.0)))
         if actual != expected.get("classification"):
             errors.append(f"semantic:{fixture.get('id')} expected {expected}, got {actual}")
 
@@ -271,9 +262,7 @@ def expected_lock(matrix_text: str, *, root: Path = ROOT) -> JsonObject:
     }
 
 
-def validate_contract_data(
-    data: JsonObject, *, root: Path = ROOT, check_lock: bool = True
-) -> list[str]:
+def validate_contract_data(data: JsonObject, *, root: Path = ROOT, check_lock: bool = True) -> list[str]:
     schema = load_object(root / SCHEMA_PATH.relative_to(ROOT))
     errors = schema_errors(data, schema)
     errors.extend(semantic_errors(data, root=root))

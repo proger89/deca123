@@ -1,0 +1,76 @@
+{
+  "$id": "https://example.invalid/safesort/decision-event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bundle_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "classification": {
+      "enum": [
+        "B",
+        "C",
+        "D",
+        "ABSTAIN_DIMENSION",
+        "ABSTAIN_SHAPE"
+      ]
+    },
+    "confirmed_route": {
+      "oneOf": [
+        {
+          "enum": [
+            "B",
+            "C",
+            "D",
+            "HOLD"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event_type": {
+      "const": "decision"
+    },
+    "execution_status": {
+      "enum": [
+        "SUCCESS",
+        "SAFE_REJECT",
+        "FAULT"
+      ]
+    },
+    "item_seq": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "physical_route": {
+      "enum": [
+        "B",
+        "C",
+        "D",
+        "HOLD"
+      ]
+    },
+    "state": {
+      "const": "COMMITTED"
+    },
+    "tick": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_type",
+    "item_seq",
+    "tick",
+    "bundle_hash",
+    "classification",
+    "physical_route",
+    "confirmed_route",
+    "execution_status",
+    "state"
+  ],
+  "type": "object"
+}

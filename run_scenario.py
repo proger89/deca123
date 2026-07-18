@@ -54,9 +54,7 @@ def webots_version() -> str:
     candidates = [shutil.which("webots"), "/usr/local/webots/webots"]
     for candidate in candidates:
         if candidate and Path(candidate).exists():
-            completed = subprocess.run(
-                [candidate, "--version"], capture_output=True, text=True, check=False
-            )
+            completed = subprocess.run([candidate, "--version"], capture_output=True, text=True, check=False)
             text = (completed.stdout or completed.stderr).strip()
             if completed.returncode == 0 and text:
                 return text.splitlines()[-1]
@@ -161,8 +159,36 @@ def command_contract_validate(inside_container: bool, tag: str) -> int:
     return 0
 
 
+def command_architecture_verify(inside_container: bool, tag: str) -> int:
+    if not inside_container:
+        env, _ = docker_environment()
+        return run_checked(
+            [
+                docker_executable(),
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "-e",
+                "SAFESORT_IN_CONTAINER=1",
+                tag,
+                "architecture",
+                "verify",
+                "--inside-container",
+            ],
+            env=env,
+        )
+
+    from tools.check_architecture import verify_architecture
+
+    summary = verify_architecture()
+    summary["result"] = "pass"
+    emit(summary)
+    return 0
+
+
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks not in {"bootstrap", "contract"}:
+    if checks not in {"bootstrap", "contract", "architecture"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -187,15 +213,17 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         )
 
     test_paths = ["tests/smoke"]
-    if checks == "contract":
+    if checks in {"contract", "architecture"}:
         test_paths.append("tests/contract")
+    if checks == "architecture":
+        test_paths.append("tests/architecture")
     commands = [
         [sys.executable, "-m", "compileall", "-q", "src", "tools", "run_scenario.py"],
         [sys.executable, "-m", "ruff", "check", "src", "tests", "tools", "run_scenario.py"],
         [sys.executable, "-m", "mypy", "src", "run_scenario.py", "tools"],
         [sys.executable, "-m", "pytest", *test_paths, "-q"],
     ]
-    if checks == "contract":
+    if checks in {"contract", "architecture"}:
         commands.extend(
             [
                 [sys.executable, "tools/render_acceptance_matrix.py", "--check"],
@@ -206,6 +234,19 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
                     "validate",
                     "--inside-container",
                 ],
+            ]
+        )
+    if checks == "architecture":
+        commands.extend(
+            [
+                [
+                    sys.executable,
+                    "run_scenario.py",
+                    "architecture",
+                    "verify",
+                    "--inside-container",
+                ],
+                [sys.executable, "tools/leak_test.py", "--with-canary"],
             ]
         )
     for command in commands:
@@ -236,6 +277,12 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--inside-container", action="store_true")
     validate_parser.add_argument("--tag", default=DEFAULT_IMAGE)
 
+    architecture_parser = subparsers.add_parser("architecture")
+    architecture_subparsers = architecture_parser.add_subparsers(dest="architecture_command", required=True)
+    verify_parser = architecture_subparsers.add_parser("verify")
+    verify_parser.add_argument("--inside-container", action="store_true")
+    verify_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--checks", required=True)
     quality_parser.add_argument("--inside-container", action="store_true")
@@ -249,11 +296,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "image" and args.image_command == "build":
             return command_image_build(str(args.tag))
         if args.command == "doctor":
-            return command_doctor(
-                bool(args.require_container), bool(args.inside_container), str(args.tag)
-            )
+            return command_doctor(bool(args.require_container), bool(args.inside_container), str(args.tag))
         if args.command == "contract" and args.contract_command == "validate":
             return command_contract_validate(bool(args.inside_container), str(args.tag))
+        if args.command == "architecture" and args.architecture_command == "verify":
+            return command_architecture_verify(bool(args.inside_container), str(args.tag))
         if args.command == "quality":
             return command_quality(str(args.checks), bool(args.inside_container), str(args.tag))
     except RuntimeError as error:

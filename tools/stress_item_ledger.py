@@ -55,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args(argv)
     summary = run(args.items, args.seed)
-    print(json.dumps(summary, sort_keys=True))
+    sys.stdout.write(json.dumps(summary, sort_keys=True) + "\n")
     return 0 if summary["result"] == "pass" else 1
 
 

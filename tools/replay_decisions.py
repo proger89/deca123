@@ -37,7 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     hashes = [one_replay(args.seed) for _ in range(args.repeat)]
     identical = len(set(hashes)) == 1
-    print(json.dumps({"hashes": hashes, "identical": identical, "repeat": args.repeat, "result": "pass" if identical else "fail"}))
+    sys.stdout.write(json.dumps({"hashes": hashes, "identical": identical, "repeat": args.repeat, "result": "pass" if identical else "fail"}) + "\n")
     return 0 if identical else 1
 
 

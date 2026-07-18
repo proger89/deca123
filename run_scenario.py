@@ -224,7 +224,7 @@ def command_evaluator_validate(output_value: str, inside_container: bool, tag: s
 
 
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry", "rules,ledger,deadlines"}:
+    if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry", "rules,ledger,deadlines", "all"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -248,7 +248,7 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
             env=env,
         )
 
-    test_paths = ["tests/smoke", "tests/simulation"]
+    test_paths = ["tests"] if checks == "all" else ["tests/smoke", "tests/simulation"]
     if checks in {"contract", "architecture", "sensing", "geometry"}:
         test_paths.append("tests/contract")
     if checks in {"architecture", "sensing", "geometry"}:
@@ -265,6 +265,19 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         [sys.executable, "-m", "mypy", "src", "run_scenario.py", "tools"],
         [sys.executable, "-m", "pytest", *test_paths, "-q"],
     ]
+    if checks == "all":
+        commands.extend(
+            [
+                [sys.executable, "tools/render_acceptance_matrix.py", "--check"],
+                [sys.executable, "run_scenario.py", "contract", "validate", "--inside-container"],
+                [sys.executable, "run_scenario.py", "architecture", "verify", "--inside-container"],
+                [sys.executable, "tools/leak_test.py", "--with-canary"],
+                [sys.executable, "tools/verify_calibration.py", "--config", "config/calibration/calibration.yaml"],
+                [sys.executable, "tools/check_repo_layout.py"],
+                [sys.executable, "tools/web_quality.py"],
+                [sys.executable, "tools/polish_audit.py"],
+            ]
+        )
     if checks in {"contract", "architecture", "sensing", "geometry"}:
         commands.extend(
             [
@@ -310,6 +323,14 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         emit(run_checks())
     emit({"checks": checks, "result": "pass"})
     return 0
+
+
+def command_release_check(repeat: int, *, clean_clone: bool) -> int:
+    from tools.release_check import run_release_check
+
+    summary = run_release_check(repeat, clean_clone=clean_clone)
+    emit(summary)
+    return 0 if summary["result"] == "pass" else 1
 
 
 def _workspace_output(path: str) -> Path:
@@ -936,6 +957,12 @@ def build_parser() -> argparse.ArgumentParser:
     quality_parser.add_argument("--inside-container", action="store_true")
     quality_parser.add_argument("--tag", default=DEFAULT_IMAGE)
 
+    release_parser = subparsers.add_parser("release")
+    release_subparsers = release_parser.add_subparsers(dest="release_command", required=True)
+    release_check_parser = release_subparsers.add_parser("check")
+    release_check_parser.add_argument("--repeat", type=int, required=True)
+    release_check_parser.add_argument("--clean-clone", action="store_true")
+
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("--scenario", required=True)
     run_parser.add_argument("--seed", type=int, default=901)
@@ -980,6 +1007,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_evaluator_validate(str(args.output), bool(args.inside_container), str(args.tag))
         if args.command == "quality":
             return command_quality(str(args.checks), bool(args.inside_container), str(args.tag))
+        if args.command == "release" and args.release_command == "check":
+            return command_release_check(int(args.repeat), clean_clone=bool(args.clean_clone))
         if args.command == "run":
             return command_run(
                 str(args.scenario),

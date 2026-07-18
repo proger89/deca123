@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SafeSort — локальная проверка STL-моделей и объяснимое назначение маршрута B, C или D.">
+  <meta name="theme-color" content="#071a37">
+  <title>SafeSort — проверка неизвестной STL-модели</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="SafeSort — на главную">SafeSort</a>
+    <p class="page-title">Проверка неизвестной STL-модели</p>
+    <p class="privacy-note">Локальная обработка · файл не покидает устройство</p>
+  </header>
+
+  <main class="workspace" id="main">
+    <section class="model-panel" aria-labelledby="model-title">
+      <div class="filebar">
+        <div>
+          <h1 id="model-title">Загрузите товар в формате STL</h1>
+          <p id="file-meta">До 50 МБ · ASCII или binary STL · единицы считаются миллиметрами</p>
+        </div>
+        <button class="text-button" id="change-file" type="button">Выбрать файл</button>
+      </div>
+
+      <div class="viewer-shell" id="viewer-shell">
+        <div class="mode-buttons" aria-label="Режим демонстрации">
+          <button type="button" data-mode="model" aria-pressed="true">Товар</button>
+          <button type="button" data-mode="conveyor" aria-pressed="false">Конвейер</button>
+        </div>
+        <canvas id="viewer" width="900" height="560" tabindex="0" aria-label="Трёхмерный просмотр загруженной STL-модели. Модель можно вращать перетаскиванием."></canvas>
+        <div class="empty-view" id="empty-view">
+          <strong>Модель появится здесь</strong>
+          <span>Перетащите STL или выберите файл на устройстве</span>
+        </div>
+        <div class="loading-view" id="loading-view" role="status" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <strong>Проверяем геометрию…</strong>
+        </div>
+        <div class="view-buttons" aria-label="Ракурс модели">
+          <button type="button" data-view="iso" aria-pressed="true">Объём</button>
+          <button type="button" data-view="top" aria-pressed="false">Сверху</button>
+          <button type="button" data-view="front" aria-pressed="false">Спереди</button>
+          <button type="button" data-view="side" aria-pressed="false">Сбоку</button>
+        </div>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="stl-input">
+        <input id="stl-input" type="file" accept=".stl,model/stl,application/sla" aria-describedby="upload-help">
+        <strong>Перетащите STL сюда или <span>выберите файл</span></strong>
+        <small id="upload-help">Разбор идёт только в браузере. STL не содержит единиц измерения — используем мм.</small>
+      </label>
+
+      <div class="actions">
+        <button class="primary-button" id="run-check" type="button" disabled>Проверить модель</button>
+        <div class="examples" aria-label="Учебные примеры">
+          <span>Примеры:</span>
+          <button type="button" data-sample="B">B</button>
+          <button type="button" data-sample="C">C</button>
+          <button type="button" data-sample="D">D</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="result-panel" aria-labelledby="result-title">
+      <h2 id="result-title">Результат проверки</h2>
+      <div class="empty-result" id="empty-result">
+        <strong>Пока нет результата</strong>
+        <p>Загрузите STL — покажем размеры, коэффициент формы и назначенный маршрут.</p>
+      </div>
+
+      <div id="result-content" hidden>
+        <table>
+          <caption class="sr-only">Измеренные параметры модели</caption>
+          <thead><tr><th>Параметр</th><th>Значение</th><th>Ед.</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Длина (L)</th><td id="metric-length">—</td><td>мм</td></tr>
+            <tr><th scope="row">Ширина (W)</th><td id="metric-width">—</td><td>мм</td></tr>
+            <tr><th scope="row">Высота (H)</th><td id="metric-height">—</td><td>мм</td></tr>
+            <tr><th scope="row">Оценка K</th><td id="metric-k">—</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <p class="formula">K = r вписанной окружности / R описанной окружности</p>
+
+        <section class="route-card" id="route-card" aria-live="polite">
+          <div class="route-heading">
+            <span class="route-letter" id="route-letter">—</span>
+            <div><strong id="route-name">Маршрут не определён</strong><span id="route-subtitle"></span></div>
+          </div>
+          <p><strong>Причина:</strong> <span id="route-reason">—</span></p>
+          <p class="cycle-status"><strong>Конвейер:</strong> <span id="cycle-status">ожидает запуска</span></p>
+        </section>
+
+        <div class="cycle-actions">
+          <button type="button" id="repeat-cycle">Повторить цикл</button>
+          <button type="button" id="fault-cycle">Показать отказ</button>
+        </div>
+
+        <div class="legend" aria-label="Назначение маршрутов">
+          <span><i class="legend-b"></i>B — стандарт</span>
+          <span><i class="legend-c"></i>C — габарит</span>
+          <span><i class="legend-d"></i>D — круглая форма</span>
+        </div>
+      </div>
+
+      <section class="error-card" id="error-card" role="alert" hidden>
+        <strong>Не удалось проверить STL</strong>
+        <p id="error-message"></p>
+        <button type="button" id="retry-button">Выбрать другой файл</button>
+      </section>
+    </aside>
+
+    <section class="process-strip" aria-label="Как работает решение">
+      <span>STL</span><b aria-hidden="true">→</b><span>5 виртуальных ракурсов</span><b aria-hidden="true">→</b><span>размеры и K</span><b aria-hidden="true">→</b><span id="process-route">маршрут B / C / D</span>
+    </section>
+
+    <details class="evidence" id="evidence">
+      <summary>Доказательства и журнал · <span id="event-count">0 событий</span></summary>
+      <ol id="event-log"></ol>
+    </details>
+    <button class="report-button" id="download-report" type="button" disabled>Скачать отчёт JSON</button>
+  </main>
+
+  <p class="status-live sr-only" id="status-live" aria-live="polite"></p>
+  <script src="app.js" defer></script>
+</body>
+</html>

@@ -32,6 +32,8 @@ COPY assets ./assets
 COPY criteria ./criteria
 COPY docs ./docs
 COPY scenarios ./scenarios
+COPY submission ./submission
+COPY web ./web
 COPY webots ./webots
 COPY run_scenario.py ./run_scenario.py
 RUN uv sync --frozen --group dev

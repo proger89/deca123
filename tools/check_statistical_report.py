@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--bundle", type=Path, required=True)
     args = parser.parse_args(argv)
     result = check(args.bundle)
-    print(json.dumps(result, sort_keys=True))
+    sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
     return 0 if result["result"] == "pass" else 1
 
 

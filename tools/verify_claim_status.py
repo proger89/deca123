@@ -1,0 +1,35 @@
+"""Reject unsupported 7200/h marketing claims."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections.abc import Sequence
+from pathlib import Path
+
+
+def verify(bundle: Path) -> dict[str, object]:
+    claim = json.loads((bundle / "claim-status.json").read_text(encoding="utf-8"))
+    report = json.loads((bundle / "throughput-report.json").read_text(encoding="utf-8"))
+    safe = int(report["unsafe_to_b"]) == int(report["jams"]) == int(report["lost"]) == 0
+    honest = claim["result"] == "UNSUPPORTED" and "5143" in claim["supported_profile"]
+    return {
+        "claim_7200": claim["result"],
+        "honest_status": honest,
+        "physical_safety_gates": safe,
+        "result": "pass" if honest and safe else "fail",
+        "supported_profile": claim["supported_profile"],
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bundle", type=Path, required=True)
+    args = parser.parse_args(argv)
+    result = verify(args.bundle)
+    print(json.dumps(result, sort_keys=True))
+    return 0 if result["result"] == "pass" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

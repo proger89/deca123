@@ -561,7 +561,7 @@ def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int
 
 
 def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
-    if profile not in {"sensing", "geometry", "uncertainty", "gates", "reliability-release"}:
+    if profile not in {"sensing", "geometry", "uncertainty", "gates", "reliability-release", "hour-flow"}:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
         return 2
     if profile == "geometry" and inside_container:
@@ -588,6 +588,12 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         from tools.reliability_suite import run_reliability_suite
 
         summary = run_reliability_suite(Path(output_value), seed)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
+    if profile == "hour-flow" and inside_container:
+        from tools.throughput_suite import run_throughput_suite
+
+        summary = run_throughput_suite(Path(output_value), seed)
         emit(summary)
         return 0 if summary["result"] == "pass" else 1
     if inside_container:
@@ -668,6 +674,17 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
             "result": "pass" if passed else "fail",
             "verification": verification,
         }
+        atomic_json(output / "suite-summary.json", payload)
+        emit(payload)
+        return 0 if passed else 1
+    if profile == "hour-flow":
+        flow_code = _run_suite_container(profile, seed, output, tag)
+        smoke_output = output / "physical-smoke-regression"
+        smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
+        report_path = output / "throughput-report.json"
+        report_exists = report_path.is_file()
+        passed = flow_code == 0 and smoke_code == 0 and report_exists and _read_result_status(smoke_output) == "SUCCESS"
+        payload = {"physical_smoke": passed, "report_exists": report_exists, "result": "pass" if passed else "fail"}
         atomic_json(output / "suite-summary.json", payload)
         emit(payload)
         return 0 if passed else 1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -75,11 +76,13 @@ SECRET = re.compile(
 
 
 def project_files() -> list[Path]:
-    return [
-        path
-        for path in ROOT.rglob("*")
-        if path.is_file() and not any(part in EXCLUDED_PARTS for part in path.parts)
-    ]
+    files: list[Path] = []
+    for directory, child_directories, filenames in os.walk(ROOT):
+        child_directories[:] = [
+            name for name in child_directories if name not in EXCLUDED_PARTS
+        ]
+        files.extend(Path(directory) / filename for filename in filenames)
+    return files
 
 
 def main() -> int:

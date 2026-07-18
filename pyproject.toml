@@ -24,6 +24,7 @@ perception = [
 dev = [
   "jsonschema==4.23.0",
   "mypy==1.16.1",
+  "numpy==2.2.6",
   "pytest==8.4.1",
   "ruff==0.12.1",
 ]

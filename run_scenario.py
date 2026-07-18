@@ -190,7 +190,7 @@ def command_architecture_verify(inside_container: bool, tag: str) -> int:
 
 
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
-    if checks not in {"bootstrap", "contract", "architecture", "sensing"}:
+    if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
         return 2
 
@@ -215,19 +215,21 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
         )
 
     test_paths = ["tests/smoke", "tests/simulation"]
-    if checks in {"contract", "architecture", "sensing"}:
+    if checks in {"contract", "architecture", "sensing", "geometry"}:
         test_paths.append("tests/contract")
-    if checks in {"architecture", "sensing"}:
+    if checks in {"architecture", "sensing", "geometry"}:
         test_paths.append("tests/architecture")
-    if checks == "sensing":
+    if checks in {"sensing", "geometry"}:
         test_paths.append("tests/sensing")
+    if checks == "geometry":
+        test_paths.append("tests/geometry")
     commands = [
         [sys.executable, "-m", "compileall", "-q", "src", "tools", "run_scenario.py"],
         [sys.executable, "-m", "ruff", "check", "src", "tests", "tools", "run_scenario.py"],
         [sys.executable, "-m", "mypy", "src", "run_scenario.py", "tools"],
         [sys.executable, "-m", "pytest", *test_paths, "-q"],
     ]
-    if checks in {"contract", "architecture", "sensing"}:
+    if checks in {"contract", "architecture", "sensing", "geometry"}:
         commands.extend(
             [
                 [sys.executable, "tools/render_acceptance_matrix.py", "--check"],
@@ -240,7 +242,7 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
                 ],
             ]
         )
-    if checks in {"architecture", "sensing"}:
+    if checks in {"architecture", "sensing", "geometry"}:
         commands.extend(
             [
                 [
@@ -253,7 +255,7 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
                 [sys.executable, "tools/leak_test.py", "--with-canary"],
             ]
         )
-    if checks == "sensing":
+    if checks in {"sensing", "geometry"}:
         commands.append(
             [
                 sys.executable,
@@ -451,9 +453,49 @@ def command_verify_bundle(bundle_value: str) -> int:
     return 0
 
 
-def command_suite(profile: str, seed: int, output_value: str, tag: str) -> int:
-    if profile != "sensing":
+def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int:
+    env, _ = docker_environment()
+    output.mkdir(parents=True, exist_ok=True)
+    return run_checked(
+        [
+            docker_executable(),
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--cpus",
+            "2",
+            "--memory",
+            "4g",
+            "-v",
+            f"{output}:/output",
+            tag,
+            "suite",
+            "--profile",
+            profile,
+            "--seed",
+            str(seed),
+            "--output",
+            "/output",
+            "--inside-container",
+        ],
+        env=env,
+    )
+
+
+def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
+    if profile not in {"sensing", "geometry"}:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
+        return 2
+    if profile == "geometry" and inside_container:
+        from tools.geometry_suite import run_geometry_suite
+
+        summary = run_geometry_suite(Path(output_value), seed)
+        summary["result"] = "pass"
+        emit(summary)
+        return 0
+    if inside_container:
+        emit({"error": "sensing suite is orchestrated by the host", "result": "fail"})
         return 2
     from safesort.runtime.sensing import FrameBundle, ViewFrame, ViewHealth, assemble_frame_bundle
     from tools.smoke_cycle import atomic_json, load_object
@@ -465,6 +507,26 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str) -> int:
     output.mkdir(parents=True)
     if command_image_build(tag) != 0:
         return 1
+    if profile == "geometry":
+        from tools.evaluate_geometry import evaluate
+
+        geometry_code = _run_suite_container(profile, seed, output, tag)
+        smoke_output = output / "smoke-regression"
+        smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
+        try:
+            evaluation = evaluate(output)
+        except RuntimeError as error:
+            emit({"error": str(error), "result": "fail"})
+            return 1
+        passed = geometry_code == 0 and smoke_code == 0 and _read_result_status(smoke_output) == "SUCCESS"
+        payload: dict[str, object] = {
+            "evaluation": evaluation,
+            "result": "pass" if passed else "fail",
+            "smoke_regression": passed,
+        }
+        atomic_json(output / "suite-summary.json", payload)
+        emit(payload)
+        return 0 if passed else 1
     hashes: list[str] = []
     health_sequences: list[list[str]] = []
     spreads: list[int] = []
@@ -564,13 +626,9 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str) -> int:
         smoke_pass
         and identical
         and spreads == [0, 0, 0]
-        and all(
-            bool(value)
-            for key, value in canaries.items()
-            if key.endswith(("rejected", "invalid"))
-        )
+        and all(bool(value) for key, value in canaries.items() if key.endswith(("rejected", "invalid")))
     )
-    summary: dict[str, object] = {
+    sensing_summary: dict[str, object] = {
         "bundle_hashes": hashes,
         "calibration_hash": first_bundle["calibration_hash"],
         "canaries": canaries,
@@ -580,8 +638,8 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str) -> int:
         "smoke_regression": smoke_pass,
         "timestamp_spreads": spreads,
     }
-    atomic_json(output / "sensing-summary.json", summary)
-    emit(summary)
+    atomic_json(output / "sensing-summary.json", sensing_summary)
+    emit(sensing_summary)
     return 0 if passed else 1
 
 
@@ -637,6 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
     suite_parser.add_argument("--seed", type=int, required=True)
     suite_parser.add_argument("--output", required=True)
     suite_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+    suite_parser.add_argument("--inside-container", action="store_true")
     return parser
 
 
@@ -667,7 +726,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "verify":
             return command_verify_bundle(str(args.bundle))
         if args.command == "suite":
-            return command_suite(str(args.profile), int(args.seed), str(args.output), str(args.tag))
+            return command_suite(
+                str(args.profile),
+                int(args.seed),
+                str(args.output),
+                str(args.tag),
+                inside_container=bool(args.inside_container),
+            )
     except RuntimeError as error:
         emit({"error": str(error)})
         return 1

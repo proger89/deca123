@@ -189,6 +189,40 @@ def command_architecture_verify(inside_container: bool, tag: str) -> int:
     return 0
 
 
+def command_evaluator_validate(output_value: str, inside_container: bool, tag: str) -> int:
+    if inside_container:
+        from tools.evaluator_validate import validate
+
+        summary = validate(Path(output_value))
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
+    output = _workspace_output(output_value)
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True)
+    if command_image_build(tag) != 0:
+        return 1
+    env, _ = docker_environment()
+    return run_checked(
+        [
+            docker_executable(),
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "-v",
+            f"{output}:/output",
+            tag,
+            "evaluator",
+            "validate",
+            "--output",
+            "/output",
+            "--inside-container",
+        ],
+        env=env,
+    )
+
+
 def command_quality(checks: str, inside_container: bool, tag: str) -> int:
     if checks not in {"bootstrap", "contract", "architecture", "sensing", "geometry", "rules,ledger,deadlines"}:
         emit({"error": "quality profile is not implemented yet", "profile": checks})
@@ -751,6 +785,13 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--inside-container", action="store_true")
     verify_parser.add_argument("--tag", default=DEFAULT_IMAGE)
 
+    evaluator_parser = subparsers.add_parser("evaluator")
+    evaluator_subparsers = evaluator_parser.add_subparsers(dest="evaluator_command", required=True)
+    evaluator_validate_parser = evaluator_subparsers.add_parser("validate")
+    evaluator_validate_parser.add_argument("--output", required=True)
+    evaluator_validate_parser.add_argument("--inside-container", action="store_true")
+    evaluator_validate_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
     quality_parser = subparsers.add_parser("quality")
     quality_parser.add_argument("--checks", required=True)
     quality_parser.add_argument("--inside-container", action="store_true")
@@ -793,6 +834,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_contract_validate(bool(args.inside_container), str(args.tag))
         if args.command == "architecture" and args.architecture_command == "verify":
             return command_architecture_verify(bool(args.inside_container), str(args.tag))
+        if args.command == "evaluator" and args.evaluator_command == "validate":
+            return command_evaluator_validate(str(args.output), bool(args.inside_container), str(args.tag))
         if args.command == "quality":
             return command_quality(str(args.checks), bool(args.inside_container), str(args.tag))
         if args.command == "run":

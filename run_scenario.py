@@ -511,8 +511,14 @@ def command_replay(bundle_value: str, repeat: int, tag: str) -> int:
     return 0 if identical else 1
 
 
-def command_verify_bundle(bundle_value: str) -> int:
+def command_verify_bundle(bundle_value: str, *, tamper_canary: bool = False) -> int:
     bundle = _workspace_output(bundle_value)
+    if (bundle / "release-manifest.json").is_file():
+        from tools.release_bundle import verify_release_bundle
+
+        summary = verify_release_bundle(bundle, tamper_canary=tamper_canary)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
     if (bundle / "reliability-summary.json").is_file():
         from tools.reliability_suite import verify_reliability_bundle
 
@@ -530,20 +536,33 @@ def command_verify_bundle(bundle_value: str) -> int:
     return 0
 
 
-def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int:
+def _run_suite_container(
+    profile: str,
+    seed: int,
+    output: Path,
+    tag: str,
+    *,
+    repeat: int = 1,
+    record_video: bool = False,
+    environment: dict[str, str] | None = None,
+) -> int:
     env, _ = docker_environment()
     output.mkdir(parents=True, exist_ok=True)
-    return run_checked(
-        [
-            docker_executable(),
-            "run",
-            "--rm",
-            "--network",
-            "none",
-            "--cpus",
-            "2",
-            "--memory",
-            "4g",
+    command = [
+        docker_executable(),
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--cpus",
+        "2",
+        "--memory",
+        "4g",
+    ]
+    for key, value in sorted((environment or {}).items()):
+        command.extend(("-e", f"{key}={value}"))
+    command.extend(
+        (
             "-v",
             f"{output}:/output",
             tag,
@@ -552,16 +571,38 @@ def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int
             profile,
             "--seed",
             str(seed),
+            "--repeat",
+            str(repeat),
             "--output",
             "/output",
             "--inside-container",
-        ],
-        env=env,
+        )
     )
+    if record_video:
+        command.append("--record-video")
+    return run_checked(command, env=env)
 
 
-def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
-    if profile not in {"sensing", "geometry", "uncertainty", "gates", "reliability-release", "hour-flow", "ablations"}:
+def command_suite(
+    profile: str,
+    seed: int,
+    output_value: str,
+    tag: str,
+    *,
+    inside_container: bool,
+    repeat: int = 1,
+    record_video: bool = False,
+) -> int:
+    if profile not in {
+        "sensing",
+        "geometry",
+        "uncertainty",
+        "gates",
+        "reliability-release",
+        "hour-flow",
+        "ablations",
+        "release",
+    }:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
         return 2
     if profile == "geometry" and inside_container:
@@ -602,6 +643,12 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         summary = run_ablations(Path(output_value), seed)
         emit(summary)
         return 0 if summary["result"] == "pass" else 1
+    if profile == "release" and inside_container:
+        from tools.release_bundle import generate_release_bundle
+
+        summary = generate_release_bundle(Path(output_value), repeat, seed, record_video=record_video)
+        emit(summary)
+        return 0 if summary["result"] == "pass" else 1
     if inside_container:
         emit({"error": "sensing suite is orchestrated by the host", "result": "fail"})
         return 2
@@ -609,6 +656,8 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
     from tools.smoke_cycle import atomic_json, load_object
     from tools.verify_calibration import CalibrationError, validate_calibration
 
+    if profile == "release" and tag == DEFAULT_IMAGE:
+        tag = "deca123-sim:submission"
     output = _workspace_output(output_value)
     if output.exists():
         shutil.rmtree(output)
@@ -703,6 +752,35 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
         payload = {"evaluation": evaluation, "result": "pass" if passed else "fail"}
         atomic_json(output / "suite-summary.json", payload)
         emit(payload)
+        return 0 if passed else 1
+    if profile == "release":
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, check=False).stdout.strip())
+        image_digest = subprocess.run(
+            [docker_executable(), "image", "inspect", tag, "--format", "{{.Id}}"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        release_code = _run_suite_container(
+            profile,
+            seed,
+            output,
+            tag,
+            repeat=repeat,
+            record_video=record_video,
+            environment={
+                "SAFESORT_GIT_COMMIT": commit,
+                "SAFESORT_GIT_DIRTY": str(dirty).lower(),
+                "SAFESORT_IMAGE_DIGEST": image_digest,
+            },
+        )
+        from tools.release_bundle import verify_release_bundle
+
+        verification = verify_release_bundle(output, tamper_canary=False)
+        passed = release_code == 0 and verification["result"] == "pass"
+        emit({"result": "pass" if passed else "fail", "verification": verification})
         return 0 if passed else 1
     hashes: list[str] = []
     health_sequences: list[list[str]] = []
@@ -874,10 +952,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     bundle_verify_parser = subparsers.add_parser("verify")
     bundle_verify_parser.add_argument("--bundle", required=True)
+    bundle_verify_parser.add_argument("--tamper-canary", action="store_true")
 
     suite_parser = subparsers.add_parser("suite")
     suite_parser.add_argument("--profile", required=True)
     suite_parser.add_argument("--seed", type=int, default=1101)
+    suite_parser.add_argument("--repeat", type=int, default=1)
+    suite_parser.add_argument("--record-video", action="store_true")
     suite_parser.add_argument("--output", required=True)
     suite_parser.add_argument("--tag", default=DEFAULT_IMAGE)
     suite_parser.add_argument("--inside-container", action="store_true")
@@ -912,7 +993,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "replay":
             return command_replay(str(args.bundle), int(args.repeat), str(args.tag))
         if args.command == "verify":
-            return command_verify_bundle(str(args.bundle))
+            return command_verify_bundle(str(args.bundle), tamper_canary=bool(args.tamper_canary))
         if args.command == "suite":
             return command_suite(
                 str(args.profile),
@@ -920,6 +1001,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 str(args.output),
                 str(args.tag),
                 inside_container=bool(args.inside_container),
+                repeat=int(args.repeat),
+                record_video=bool(args.record_video),
             )
     except RuntimeError as error:
         emit({"error": str(error)})

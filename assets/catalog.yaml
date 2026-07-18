@@ -1,0 +1,14 @@
+schema_version: 1
+publication_policy: local_hash_only
+items:
+  - {item_id: bottle, source: "materials/Stl/Бутылка.stl", sha256: 9a8c64f1c26a2f2e2539b5e283b36ca78158cb8d2f0f66d3201dbcc784417375}
+  - {item_id: box_300_200_200, source: "materials/Stl/Короб 300х200х200.stl", sha256: 4ac9046bdef5bad2e7e50062fea30ead9132ebb6bdf23edeceb1f61c276f6e38}
+  - {item_id: box_400_400_300, source: "materials/Stl/Короб 400х400х300.stl", sha256: 05c4ec56883f085e1dafc9bd43fb87ce9993071122e19983192b72120daa9f68}
+  - {item_id: lunchbox, source: "materials/Stl/ЛанчБокс.stl", sha256: 3ad0f231777e7fe1ac55ac55e40074baffc3561c1fe082bb50dd47161f5c5c99}
+  - {item_id: bag, source: "materials/Stl/Мешок.stl", sha256: 74b3118643c0cd06ed639da1513b6db1b8d6d0a38e708cf2f8393d69263cd97b}
+  - {item_id: detergent, source: "materials/Stl/Моющее средство.STL", sha256: 9a8239c0d079084ff45337f88a7169df75ef010c445a87ad3a5746d11ab154dd}
+  - {item_id: ottoman, source: "materials/Stl/Пуфик.stl", sha256: 1761f3b2d9e5781a11f09e868d2c14e59d3c03bd5f0c19a006f28648de9f66d1}
+  - {item_id: pen, source: "materials/Stl/Ручка.stl", sha256: 9c1d3b27b9a5e4f1e65a43ac953f74695bfa0d9550dd97963bfcb7bb39f38720}
+  - {item_id: plate, source: "materials/Stl/Тарелка.stl", sha256: 9bd0fece5fca87951d9c05576f054d0f61da76b56f0ca1387ddcfce816b23f47}
+  - {item_id: cylinder, source: "materials/Stl/Цилиндр.stl", sha256: 7aab451e1fd2154e4a2301e12642d17ccee62fc950dddf7de5e54c89453254e5}
+  - {item_id: helmet, source: "materials/Stl/Шлем.stl", sha256: 660429b26d576771cd02ff275b489dcb134b17bf83b0cab969f589b4d6f6192d}

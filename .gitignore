@@ -1,0 +1,21 @@
+.runtime/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+artifacts/
+evidence/runs/
+dist/
+build/
+tmp/
+
+# Organizer-provided files have no explicit redistribution licence in the bundle.
+materials/**
+
+# Supergoal planning is local orchestration state, not product source.
+.supergoal/
+.agents/

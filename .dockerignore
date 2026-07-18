@@ -1,0 +1,13 @@
+.git
+.github
+.supergoal
+.agents
+.runtime
+.venv
+artifacts
+evidence/runs
+materials
+tmp
+__pycache__
+*.pyc
+

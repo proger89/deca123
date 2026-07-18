@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "band_id": "locked-pre-evaluation-v1",
+  "dimension_half_width_mm": 5.0,
+  "circularity_half_width_k": 0.03,
+  "dimension_thresholds_mm": [450.0, 320.0, 320.0],
+  "minimum_dimension_mm": 10.0,
+  "circularity_threshold_k": 0.8,
+  "rescan_dimension_half_width_mm": 2.0,
+  "rescan_circularity_half_width_k": 0.015,
+  "locked_before_seed": 701
+}

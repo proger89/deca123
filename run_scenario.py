@@ -484,13 +484,20 @@ def _run_suite_container(profile: str, seed: int, output: Path, tag: str) -> int
 
 
 def command_suite(profile: str, seed: int, output_value: str, tag: str, *, inside_container: bool) -> int:
-    if profile not in {"sensing", "geometry"}:
+    if profile not in {"sensing", "geometry", "uncertainty"}:
         emit({"error": "suite profile is not implemented yet", "profile": profile})
         return 2
     if profile == "geometry" and inside_container:
         from tools.geometry_suite import run_geometry_suite
 
         summary = run_geometry_suite(Path(output_value), seed)
+        summary["result"] = "pass"
+        emit(summary)
+        return 0
+    if profile == "uncertainty" and inside_container:
+        from tools.uncertainty_suite import run_uncertainty_suite
+
+        summary = run_uncertainty_suite(Path(output_value), seed)
         summary["result"] = "pass"
         emit(summary)
         return 0
@@ -523,6 +530,29 @@ def command_suite(profile: str, seed: int, output_value: str, tag: str, *, insid
             "evaluation": evaluation,
             "result": "pass" if passed else "fail",
             "smoke_regression": passed,
+        }
+        atomic_json(output / "suite-summary.json", payload)
+        emit(payload)
+        return 0 if passed else 1
+    if profile == "uncertainty":
+        from tools.audit_dataset_split import audit
+        from tools.evaluate_rescan import evaluate
+
+        uncertainty_code = _run_suite_container(profile, seed, output, tag)
+        smoke_output = output / "smoke-regression"
+        smoke_code = _run_smoke_container("scenarios/smoke/unknown_stl_b.yaml", seed, smoke_output, tag, canary=False)
+        try:
+            split_audit = audit(output)
+            rescan_evaluation = evaluate(output)
+        except RuntimeError as error:
+            emit({"error": str(error), "result": "fail"})
+            return 1
+        passed = uncertainty_code == 0 and smoke_code == 0 and _read_result_status(smoke_output) == "SUCCESS"
+        payload = {
+            "rescan_evaluation": rescan_evaluation,
+            "result": "pass" if passed else "fail",
+            "smoke_regression": passed,
+            "split_audit": split_audit,
         }
         atomic_json(output / "suite-summary.json", payload)
         emit(payload)

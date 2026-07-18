@@ -212,7 +212,7 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
             env=env,
         )
 
-    test_paths = ["tests/smoke"]
+    test_paths = ["tests/smoke", "tests/simulation"]
     if checks in {"contract", "architecture"}:
         test_paths.append("tests/contract")
     if checks == "architecture":
@@ -257,6 +257,187 @@ def command_quality(checks: str, inside_container: bool, tag: str) -> int:
     return 0
 
 
+def _workspace_output(path: str) -> Path:
+    output = Path(path).resolve()
+    if not output.is_relative_to(ROOT):
+        raise RuntimeError("host output must stay inside the repository")
+    return output
+
+
+def _run_smoke_container(
+    scenario: str,
+    seed: int,
+    output: Path,
+    tag: str,
+    *,
+    canary: bool,
+) -> int:
+    env, _ = docker_environment()
+    output.mkdir(parents=True, exist_ok=True)
+    command = [
+        docker_executable(),
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--cpus",
+        "2",
+        "--memory",
+        "4g",
+        "-e",
+        "SAFESORT_IN_CONTAINER=1",
+        "-v",
+        f"{output}:/output",
+        tag,
+        "run",
+        "--scenario",
+        scenario,
+        "--seed",
+        str(seed),
+        "--output",
+        "/output",
+        "--inside-container",
+    ]
+    if canary:
+        command.append("--canary")
+    return run_checked(command, env=env)
+
+
+def _read_result_status(output: Path) -> str | None:
+    result = output / "evaluator-result.json"
+    if not result.is_file():
+        return None
+    payload = json.loads(result.read_text(encoding="utf-8"))
+    return str(payload.get("result")) if isinstance(payload, dict) else None
+
+
+def _inside_smoke_run(scenario: str, seed: int, output: Path, *, canary: bool) -> int:
+    from tools.smoke_cycle import create_trace_video, validate_scene, write_manifest
+
+    scenario_path = ROOT / scenario
+    scene = validate_scene(scenario_path, output)
+    world = ROOT / str(json.loads(scenario_path.read_text(encoding="utf-8"))["world"])
+    env = os.environ.copy()
+    env.update(
+        {
+            "PYTHONHASHSEED": "0",
+            "QTWEBENGINE_DISABLE_SANDBOX": "1",
+            "SAFESORT_DISABLE_EXIT": "1" if canary else "0",
+            "SAFESORT_OUTPUT_DIR": str(output),
+            "SAFESORT_SEED": str(seed),
+        }
+    )
+    command = [
+        "xvfb-run",
+        "-a",
+        "/usr/local/webots/webots",
+        "--batch",
+        "--mode=fast",
+        "--minimize",
+        "--stdout",
+        "--stderr",
+        str(world),
+    ]
+    try:
+        completed = subprocess.run(command, cwd=ROOT, env=env, check=False, timeout=90)
+        exit_code = completed.returncode
+    except subprocess.TimeoutExpired:
+        exit_code = 124
+    status = _read_result_status(output)
+    if canary and status == "FAULT":
+        exit_code = 3
+    elif not canary and status == "SUCCESS":
+        exit_code = 0
+    elif exit_code == 0:
+        exit_code = 2
+    if not canary and exit_code == 0:
+        create_trace_video(output)
+    manifest = write_manifest(output, scenario, seed, exit_code, canary=canary)
+    emit(
+        {
+            "canary": canary,
+            "exit_code": exit_code,
+            "network": "none",
+            "result": status or "missing",
+            "scene": scene["result"],
+            "semantic_trace_hash": manifest["semantic_trace_hash"],
+        }
+    )
+    return exit_code
+
+
+def command_run(
+    scenario: str,
+    seed: int,
+    output_value: str,
+    inside_container: bool,
+    tag: str,
+    *,
+    canary: bool,
+) -> int:
+    if inside_container:
+        return _inside_smoke_run(scenario, seed, Path(output_value), canary=canary)
+    output = _workspace_output(output_value)
+    if output.exists():
+        shutil.rmtree(output)
+    if command_image_build(tag) != 0:
+        return 1
+    nominal_code = _run_smoke_container(scenario, seed, output, tag, canary=False)
+    canary_output = output / "canary"
+    canary_code = _run_smoke_container(scenario, seed, canary_output, tag, canary=True)
+    summary = {
+        "canary_exit_code": canary_code,
+        "canary_expected_nonzero": canary_code != 0,
+        "network": "none",
+        "nominal_exit_code": nominal_code,
+        "result": "pass" if nominal_code == 0 and canary_code != 0 else "fail",
+    }
+    (output / "run-summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    emit(summary)
+    return 0 if summary["result"] == "pass" else 1
+
+
+def command_replay(bundle_value: str, repeat: int, tag: str) -> int:
+    from tools.smoke_cycle import load_object
+
+    if repeat < 2:
+        raise RuntimeError("repeat must be at least 2")
+    bundle = _workspace_output(bundle_value)
+    manifest = load_object(bundle / "manifest.json")
+    scenario = str(manifest["scenario"])
+    seed = int(manifest["seed"])
+    replay_root = bundle / "replay"
+    if replay_root.exists():
+        shutil.rmtree(replay_root)
+    hashes: list[str] = []
+    for index in range(1, repeat + 1):
+        target = replay_root / f"run-{index}"
+        code = _run_smoke_container(scenario, seed, target, tag, canary=False)
+        if code != 0:
+            emit({"failed_repeat": index, "result": "fail"})
+            return 1
+        replay_manifest = load_object(target / "manifest.json")
+        hashes.append(str(replay_manifest["semantic_trace_hash"]))
+    identical = len(set(hashes)) == 1
+    payload = {"hashes": hashes, "identical": identical, "repeat": repeat, "result": "pass" if identical else "fail"}
+    (bundle / "replay.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    emit(payload)
+    return 0 if identical else 1
+
+
+def command_verify_bundle(bundle_value: str) -> int:
+    from tools.smoke_cycle import SmokeEvidenceError, verify_bundle
+
+    bundle = _workspace_output(bundle_value)
+    try:
+        summary = verify_bundle(bundle)
+    except SmokeEvidenceError as error:
+        emit({"error": str(error), "result": "fail"})
+        return 1
+    emit(summary)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -287,6 +468,22 @@ def build_parser() -> argparse.ArgumentParser:
     quality_parser.add_argument("--checks", required=True)
     quality_parser.add_argument("--inside-container", action="store_true")
     quality_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("--scenario", required=True)
+    run_parser.add_argument("--seed", type=int, required=True)
+    run_parser.add_argument("--output", required=True)
+    run_parser.add_argument("--inside-container", action="store_true")
+    run_parser.add_argument("--canary", action="store_true")
+    run_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
+    replay_parser = subparsers.add_parser("replay")
+    replay_parser.add_argument("--bundle", required=True)
+    replay_parser.add_argument("--repeat", type=int, required=True)
+    replay_parser.add_argument("--tag", default=DEFAULT_IMAGE)
+
+    bundle_verify_parser = subparsers.add_parser("verify")
+    bundle_verify_parser.add_argument("--bundle", required=True)
     return parser
 
 
@@ -303,6 +500,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command_architecture_verify(bool(args.inside_container), str(args.tag))
         if args.command == "quality":
             return command_quality(str(args.checks), bool(args.inside_container), str(args.tag))
+        if args.command == "run":
+            return command_run(
+                str(args.scenario),
+                int(args.seed),
+                str(args.output),
+                bool(args.inside_container),
+                str(args.tag),
+                canary=bool(args.canary),
+            )
+        if args.command == "replay":
+            return command_replay(str(args.bundle), int(args.repeat), str(args.tag))
+        if args.command == "verify":
+            return command_verify_bundle(str(args.bundle))
     except RuntimeError as error:
         emit({"error": str(error)})
         return 1

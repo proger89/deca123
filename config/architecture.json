@@ -18,14 +18,10 @@
       "controller": "webots/controllers/runtime_controller/runtime_controller.py",
       "devices": [
         "RangeFinder:rangefinder_top",
-        "RangeFinder:rangefinder_left",
-        "RangeFinder:rangefinder_right",
-        "RangeFinder:rangefinder_front",
-        "RangeFinder:rangefinder_rear",
         "DistanceSensor:photoeye_entry",
-        "PositionSensor:belt_encoder",
-        "PositionSensor:dimension_gate_position",
-        "PositionSensor:shape_gate_position",
+        "DistanceSensor:b_exit_sensor",
+        "RotationalMotor:provisional_gate_motor",
+        "PositionSensor:provisional_gate_position",
         "Emitter:runtime_events_emitter"
       ],
       "package": "src/safesort/runtime"

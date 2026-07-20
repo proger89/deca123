@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -136,6 +137,21 @@ def _frame_pixels(position: tuple[float, float], width: int = 640, height: int =
 
 
 def create_trace_video(output: Path) -> Path:
+    target = output / "smoke-trace.mp4"
+    capture_path = output / "video-capture.json"
+    if target.is_file() and target.stat().st_size > 0 and capture_path.is_file():
+        capture = load_object(capture_path)
+        if (
+            capture.get("file") == target.name
+            and capture.get("source") == "webots-rendering"
+            and capture.get("physics_mutation") is False
+            and capture.get("schematic") is False
+        ):
+            return target
+
+    # This fallback is intentionally schematic and receives no physical-capture
+    # provenance. release_bundle.py therefore cannot promote it to evidence.
+    capture_path.unlink(missing_ok=True)
     trajectory = read_jsonl(output / "trajectory.jsonl")
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None or not trajectory:
@@ -150,7 +166,6 @@ def create_trace_video(output: Path) -> Path:
         z = float(row["z_m"])
         pixels = _frame_pixels((x, z))
         (frames / f"frame-{index:03d}.ppm").write_bytes(b"P6\n640 360\n255\n" + pixels)
-    target = output / "smoke-trace.mp4"
     command = [
         ffmpeg,
         "-hide_banner",
@@ -180,7 +195,11 @@ def write_manifest(output: Path, scenario: str, seed: int, exit_code: int, *, ca
     trace_path = output / "runtime-events.jsonl"
     payload: dict[str, object] = {
         "canary": canary,
-        "container": {"gpu": "none", "network": "none", "platform": "linux/amd64"},
+        "container": {
+            "gpu": os.environ.get("SAFESORT_GPU_MODE", "none"),
+            "network": "none",
+            "platform": "linux/amd64",
+        },
         "exit_code": exit_code,
         "files": hashes,
         "scenario": scenario,
@@ -196,6 +215,18 @@ def write_manifest(output: Path, scenario: str, seed: int, exit_code: int, *, ca
             "noise_model": calibration["noise_model"],
             "seed": seed,
         }
+    capture_path = output / "video-capture.json"
+    if capture_path.is_file():
+        capture = load_object(capture_path)
+        video_path = output / str(capture.get("file", ""))
+        if (
+            capture.get("source") == "webots-rendering"
+            and capture.get("physics_mutation") is False
+            and capture.get("schematic") is False
+            and video_path.is_file()
+            and video_path.stat().st_size > 0
+        ):
+            payload["video_capture"] = capture
     atomic_json(output / "manifest.json", payload)
     return payload
 

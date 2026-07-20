@@ -1,0 +1,43 @@
+#VRML_SIM R2025a utf8
+
+# SAFESORT_LAYOUT workspace_mm=10000,6000
+# SAFESORT_LAYOUT a_anchor_mm=1000,3000
+# SAFESORT_LAYOUT b_anchor_mm=8000,3800
+# SAFESORT_LAYOUT c_center_mm=7000,1200 c_size_mm=1200,800,800
+# SAFESORT_LAYOUT d_center_mm=8500,1200 d_size_mm=1200,800,800
+
+EXTERNPROTO "../protos/SorterCell.proto"
+
+WorldInfo {
+  info [
+    "SafeSort physical Track smoke: oversize unknown STL to C"
+  ]
+  basicTimeStep 32
+  coordinateSystem "NUE"
+  contactProperties [
+    ContactProperties {
+      material1 "safesort_belt"
+      material2 "safesort_parcel"
+      coulombFriction [ 8 ]
+      forceDependentSlip [ 0.005 ]
+      softCFM 0.0001
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.364 0.872 0.327 1.645
+  position 5.35 8.65 8.95
+}
+DirectionalLight {
+  direction -0.3 -1 -0.2
+  intensity 1.2
+}
+
+DEF SORTER_CELL SorterCell {
+  expectedRoute "C"
+  itemMeshUrl [
+    "../../assets/smoke/anonymous_box.stl"
+  ]
+  itemScale 4 1 1
+  itemBoundingSize 0.48 0.05 0.06
+}

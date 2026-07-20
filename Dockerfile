@@ -16,12 +16,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/venv/bin:/usr/local/webots:${PATH}
 
 COPY --from=uv /uv /uvx /bin/
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends git=1:2.34.1-1ubuntu1.17 \
+    && rm -rf /var/lib/apt/lists/*
 RUN test "$(uv --version)" = "uv ${UV_VERSION}" \
     && uv python install "${PYTHON_VERSION}" \
     && uv venv --python "${PYTHON_VERSION}" /opt/venv
 
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md LICENSE .gitignore ./
+COPY pyproject.toml uv.lock README.md LICENSE .gitignore .dockerignore .gitattributes Dockerfile ./
 RUN uv sync --frozen --group dev --no-install-project
 
 COPY src ./src
@@ -30,7 +33,9 @@ COPY tools ./tools
 COPY config ./config
 COPY assets ./assets
 COPY criteria ./criteria
+COPY datasets ./datasets
 COPY docs ./docs
+COPY evidence ./evidence
 COPY scenarios ./scenarios
 COPY submission ./submission
 COPY web ./web

@@ -15,6 +15,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_IMAGE = "deca123-sim:dev"
+_GPU_PROBE_CACHE: dict[tuple[str, str], tuple[list[str], str]] = {}
 sys.path.insert(0, str(ROOT / "src"))
 
 
@@ -44,6 +45,65 @@ def docker_executable() -> str:
     if executable is None:
         raise RuntimeError("Docker CLI is not installed or not on PATH")
     return executable
+
+
+def container_gpu_arguments(tag: str, env: dict[str, str]) -> tuple[list[str], str]:
+    """Return optional NVIDIA Docker arguments with a safe CPU fallback."""
+    requested = os.environ.get("SAFESORT_GPU", "cpu").strip().lower()
+    if requested not in {"auto", "gpu", "cpu"}:
+        raise RuntimeError("SAFESORT_GPU must be one of: auto, gpu, cpu")
+    key = (tag, requested)
+    cached = _GPU_PROBE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    if requested == "cpu":
+        result = (["-e", "SAFESORT_GPU_MODE=cpu-software"], "cpu-software")
+        _GPU_PROBE_CACHE[key] = result
+        return result
+
+    probe = subprocess.run(
+        [
+            docker_executable(),
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--gpus",
+            "all",
+            "--entrypoint",
+            "python",
+            tag,
+            "-c",
+            "import glob,os,sys; sys.exit(0 if os.path.exists('/dev/dxg') or glob.glob('/dev/nvidia*') else 1)",
+        ],
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode == 0:
+        result = (
+            [
+                "--gpus",
+                "all",
+                "-e",
+                "NVIDIA_VISIBLE_DEVICES=all",
+                "-e",
+                "NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics,display",
+                "-e",
+                "SAFESORT_GPU_MODE=nvidia",
+            ],
+            "nvidia",
+        )
+    elif requested == "gpu":
+        detail = (probe.stderr or probe.stdout).strip()
+        raise RuntimeError(f"NVIDIA GPU was required but is unavailable inside Docker: {detail}")
+    else:
+        result = (["-e", "SAFESORT_GPU_MODE=cpu-software"], "cpu-software")
+    _GPU_PROBE_CACHE[key] = result
+    emit({"action": "gpu-detect", "requested": requested, "selected": result[1]})
+    return result
 
 
 def webots_version() -> str:
@@ -350,12 +410,14 @@ def _run_smoke_container(
 ) -> int:
     env, _ = docker_environment()
     output.mkdir(parents=True, exist_ok=True)
+    gpu_arguments, _ = container_gpu_arguments(tag, env)
     command = [
         docker_executable(),
         "run",
         "--rm",
         "--network",
         "none",
+        *gpu_arguments,
         "--cpus",
         "2",
         "--memory",
@@ -415,7 +477,8 @@ def _inside_smoke_run(scenario: str, seed: int, output: Path, *, canary: bool) -
         str(world),
     ]
     try:
-        completed = subprocess.run(command, cwd=ROOT, env=env, check=False, timeout=90)
+        timeout_seconds = int(os.environ.get("SAFESORT_WEBOTS_TIMEOUT_S", "240"))
+        completed = subprocess.run(command, cwd=ROOT, env=env, check=False, timeout=timeout_seconds)
         exit_code = completed.returncode
     except subprocess.TimeoutExpired:
         exit_code = 124
@@ -569,12 +632,14 @@ def _run_suite_container(
 ) -> int:
     env, _ = docker_environment()
     output.mkdir(parents=True, exist_ok=True)
+    gpu_arguments, _ = container_gpu_arguments(tag, env)
     command = [
         docker_executable(),
         "run",
         "--rm",
         "--network",
         "none",
+        *gpu_arguments,
         "--cpus",
         "2",
         "--memory",

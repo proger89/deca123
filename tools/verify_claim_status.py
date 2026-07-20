@@ -12,13 +12,18 @@ from pathlib import Path
 def verify(bundle: Path) -> dict[str, object]:
     claim = json.loads((bundle / "claim-status.json").read_text(encoding="utf-8"))
     report = json.loads((bundle / "throughput-report.json").read_text(encoding="utf-8"))
-    safe = int(report["unsafe_to_b"]) == int(report["jams"]) == int(report["lost"]) == 0
-    honest = claim["result"] == "UNSUPPORTED" and "5143" in claim["supported_profile"]
+    proxy_invariants = int(report["unsafe_to_b"]) == int(report["jams"]) == int(report["lost"]) == 0
+    honest = (
+        claim["result"] == "UNSUPPORTED"
+        and "5143" in claim["supported_profile"]
+        and report.get("physical_safety_claim") is False
+        and "proxy" in str(report.get("evidence_scope", ""))
+    )
     return {
         "claim_7200": claim["result"],
         "honest_status": honest,
-        "physical_safety_gates": safe,
-        "result": "pass" if honest and safe else "fail",
+        "proxy_safety_invariants": proxy_invariants,
+        "result": "pass" if honest and proxy_invariants else "fail",
         "supported_profile": claim["supported_profile"],
     }
 

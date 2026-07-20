@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "scenario_id": "physical-missing-exit-canary-v1",
+  "world": "webots/worlds/smoke_unknown_stl.wbt",
+  "fault": {
+    "environment": "SAFESORT_DISABLE_EXIT",
+    "value": "1",
+    "expected_execution_status": "FAULT",
+    "success_allowed": false
+  },
+  "safety": {
+    "physical_motion_continues": true,
+    "commit_requires_exit_sensor": true,
+    "timeout_steps": 520
+  }
+}

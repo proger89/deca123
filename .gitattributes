@@ -6,3 +6,10 @@
 *.yml text eol=lf
 *.json text eol=lf
 
+*.pdf binary
+*.pptx binary
+*.mp4 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.stl binary

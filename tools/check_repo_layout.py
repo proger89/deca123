@@ -89,13 +89,17 @@ def main() -> int:
     for path in project_files():
         if path == Path(__file__).resolve():
             continue
+        relative = path.relative_to(ROOT).as_posix()
+        if relative == "tools/polish_audit.py":
+            # The audit implementation intentionally contains developer-path
+            # regex literals; scanning that scanner would match its own rule.
+            continue
         if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in TEXT_SUFFIXES:
             continue
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        relative = path.relative_to(ROOT).as_posix()
         if DEVELOPER_PATH.search(content):
             absolute_path_hits.append(relative)
         if SECRET.search(content):

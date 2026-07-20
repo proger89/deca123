@@ -12,6 +12,8 @@ evidence/runs/
 dist/
 build/
 tmp/
+.local-data/
+datasets/thingi10k-sample/**/*.stl
 
 # Organizer-provided files have no explicit redistribution licence in the bundle.
 materials/**

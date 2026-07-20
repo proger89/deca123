@@ -1,13 +1,16 @@
-# Passive-safe gate cell
+# Пассивно-безопасные заслонки
 
-The dimension gate is first and mechanically rests toward C. The shape gate is second and rests toward D. Passing to B requires both motors to reach 1.2 rad and both independent position sensors to confirm within 0.02 rad before ZPA release.
+Первая заслонка проверяет габаритный допуск и в обесточенном положении отводит товар от B в C. Вторая проверяет форму и в обесточенном положении отводит товар от B в D. Маршрут B разрешается только после подтверждения обоих датчиков положения; одного программного решения недостаточно.
 
-Each `FailSafeGate` uses an 18 N·m/rad return spring, 2.35 N·m·s/rad damping, 0/1.25 rad hard stops, a 35 N·m torque limit and a `PositionSensor`. Removing motor torque therefore returns the blade physically; controller commands are not the safety mechanism.
+В проекте есть два честно разделённых уровня доказательства:
+
+- В Webots узлы `HingeJoint` в `SorterCell.proto` имеют пружину `24 Н·м/рад`, демпфирование `3,2 Н·м·с/рад`, механические упоры от `−0,75` до `0` рад, ограничение момента привода и отдельный `PositionSensor`. Контакт товара с лентой, заслонкой и датчиком выхода считается подтверждённым только в новых post-calibration traces; исторические smoke-артефакты после изменения датчиков не используются как релизное доказательство.
+- `safesort.runtime.mechanics` — численная модель возврата с параметрами `18 Н·м/рад`, `2,35 Н·м·с/рад`, упорами `0/1,25` рад и ограничением `35 Н·м`. Она нужна для расчёта времени возврата и серии fault-trials, но не называется Webots-физикой.
 
 ```text
-A / sensing -> [dimension gate; rest C] -> [shape gate; rest D] -> B
-                         |                         |
-                         +---- C                  +---- D
+A / измерение → [габаритная заслонка; покой → C] → [заслонка формы; покой → D] → B
+                               │                                  │
+                               └──────── C                        └──────── D
 ```
 
-The route state machine holds the following item until matching exit confirmation. Power loss, E-stop, jam, position failure, missing exit and route mismatch enter a latched FAULT/ESTOP state; an explicit reset is required.
+Состояние `SUCCESS` допустимо только после совпавшего сигнала выходного датчика. Потеря питания, аварийный останов, заклинивание, неподтверждённое положение, отсутствие выхода и несовпадение маршрута переводят цикл в фиксируемое состояние `FAULT`/`ESTOP`; для следующего товара нужен явный сброс.

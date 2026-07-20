@@ -1,0 +1,29 @@
+name: safesort
+
+services:
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deca123-sim:demo
+    entrypoint: ["python", "-m", "http.server"]
+    command: ["4173", "--bind", "0.0.0.0", "--directory", "/app/web"]
+    ports:
+      - "${SAFESORT_PORT:-4173}:4173"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4173/', timeout=2).read(1)"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

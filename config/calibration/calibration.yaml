@@ -2,16 +2,21 @@
   "schema_version": 1,
   "calibration_id": "safesort-five-view-r2025a-v1",
   "units": {"length": "metre", "angle": "radian", "depth": "metre"},
-  "axes": {"world": "NUE_y_up", "sensor_forward": "+X", "image": "u_right_v_down"},
+  "axes": {
+    "world": "NUE_y_up",
+    "sensor_forward": "-Z",
+    "image": "u_right_v_down",
+    "webots_device_adapter_axis_angle": [-0.577350269, 0.577350269, 0.577350269, 2.094395102]
+  },
   "sampling_period_ms": 32,
   "motion_compensation": {"source": "belt_encoder", "max_delta_mm": 25.0},
   "noise_model": {"depth_sigma_mm": 0.5, "dropout_probability": 0.0, "freeze_probability": 0.0},
   "views": {
-    "top": {"device": "rangefinder_top", "width": 96, "height": 96, "fov_rad": 0.5, "translation_m": [-3.5, 2.0, 0.0], "rotation_axis_angle": [0.0, 0.0, 1.0, -1.5708]},
-    "left": {"device": "rangefinder_left", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-3.5, 0.8, -0.8], "rotation_axis_angle": [0.0, 1.0, 0.0, -1.5708]},
-    "right": {"device": "rangefinder_right", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-3.5, 0.8, 0.8], "rotation_axis_angle": [0.0, 1.0, 0.0, 1.5708]},
-    "front": {"device": "rangefinder_front", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-4.2, 0.8, 0.0], "rotation_axis_angle": [0.0, 1.0, 0.0, 0.0]},
-    "rear": {"device": "rangefinder_rear", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-2.8, 0.8, 0.0], "rotation_axis_angle": [0.0, 1.0, 0.0, 3.14159]}
+    "top": {"device": "rangefinder_top", "width": 96, "height": 96, "fov_rad": 0.5, "translation_m": [-3.5, 2.0, 0.0], "rotation_axis_angle": [1.0, 0.0, 0.0, -1.5708]},
+    "left": {"device": "rangefinder_left", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-3.5, 0.8, -0.8], "rotation_axis_angle": [0.0, 1.0, 0.0, 3.14159]},
+    "right": {"device": "rangefinder_right", "width": 64, "height": 64, "fov_rad": 0.7, "translation_m": [-3.5, 0.8, 0.8], "rotation_axis_angle": [0.0, 1.0, 0.0, 0.0]},
+    "front": {"device": "rangefinder_front", "width": 256, "height": 256, "fov_rad": 0.7, "translation_m": [-4.2, 0.8, 0.0], "rotation_axis_angle": [0.0, 1.0, 0.0, -1.5708]},
+    "rear": {"device": "rangefinder_rear", "width": 256, "height": 256, "fov_rad": 0.7, "translation_m": [-2.8, 0.8, 0.0], "rotation_axis_angle": [0.0, 1.0, 0.0, 1.5708]}
   },
   "experimental_views": {
     "bottom": {"enabled": false, "release_authority": false, "retention_gate": "phase-7-blind-improvement"}

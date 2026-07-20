@@ -12,6 +12,7 @@ from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIMARY_VIEWS = ("top", "left", "right", "front", "rear")
+WEBOTS_DEVICE_ADAPTER_AXIS_ANGLE = (-0.577350269, 0.577350269, 0.577350269, 2.094395102)
 
 
 class CalibrationError(RuntimeError):
@@ -32,9 +33,12 @@ def validate_calibration(path: Path, *, expected_hash: str | None = None) -> dic
         raise CalibrationError("primary views must be top,left,right,front,rear in locked order")
     if data.get("sampling_period_ms") != 32:
         raise CalibrationError("sampling period must equal one 32 ms simulation step")
-    axes = cast(dict[str, str], data.get("axes", {}))
-    if axes.get("world") != "NUE_y_up" or axes.get("sensor_forward") != "+X":
+    axes = cast(dict[str, Any], data.get("axes", {}))
+    if axes.get("world") != "NUE_y_up" or axes.get("sensor_forward") != "-Z":
         raise CalibrationError("axis convention mismatch")
+    adapter = axes.get("webots_device_adapter_axis_angle")
+    if not isinstance(adapter, list) or tuple(adapter) != WEBOTS_DEVICE_ADAPTER_AXIS_ANGLE:
+        raise CalibrationError("Webots device adapter convention mismatch")
     bottom = cast(dict[str, object], cast(dict[str, Any], data.get("experimental_views", {})).get("bottom", {}))
     if bottom.get("enabled") is not False or bottom.get("release_authority") is not False:
         raise CalibrationError("bottom experiment must be disabled and non-authoritative")

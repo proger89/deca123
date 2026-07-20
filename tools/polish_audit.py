@@ -9,9 +9,40 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".runtime", ".supergoal", ".venv", "artifacts", "materials", "__pycache__"}
-TEXT_SUFFIXES = {"", ".css", ".dockerignore", ".gitattributes", ".gitignore", ".html", ".ini", ".js", ".json", ".md", ".py", ".toml", ".txt", ".yaml", ".yml"}
-SECRET = re.compile(r"(?i)(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*['\"][^'\"]{8,})")
+EXCLUDED = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".runtime",
+    ".supergoal",
+    ".venv",
+    "__pycache__",
+    "artifacts",
+    "materials",
+}
+TEXT_SUFFIXES = {
+    "",
+    ".css",
+    ".dockerignore",
+    ".gitattributes",
+    ".gitignore",
+    ".html",
+    ".ini",
+    ".js",
+    ".json",
+    ".md",
+    ".py",
+    ".toml",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+SECRET = re.compile(
+    r"(?i)(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+    r"github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|"
+    r"(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*['\"][^'\"]{8,})"
+)
 PERSONAL = re.compile(r"(?i)(?:[A-Z]:[\\/](?:Users|hackatons|sites|new-projects)[\\/]|/home/[^/]+/)")
 SESSION_MARKER = re.compile(r"(?m)(?:\bTODO\b|\bFIXME\b|console\.(?:log|error)\s*\(|\bprint\s*\()")
 

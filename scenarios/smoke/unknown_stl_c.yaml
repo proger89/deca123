@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "scenario_id": "smoke-unknown-stl-c-v1",
+  "world": "webots/worlds/smoke_unknown_stl_c.wbt",
+  "official_layout": {
+    "workspace_mm": [10000, 6000],
+    "a_anchor_mm": [1000, 3000],
+    "b_anchor_mm": [8000, 3800],
+    "c_cage": {"center_mm": [7000, 1200], "size_mm": [1200, 800, 800]},
+    "d_cage": {"center_mm": [8500, 1200], "size_mm": [1200, 800, 800]},
+    "belt_width_mm": 500,
+    "belt_height_mm": 700
+  },
+  "evaluator_asset": {
+    "anonymous_id": "fixture-7f3a",
+    "source_asset": "assets/smoke/anonymous_box.stl",
+    "scale": [4.0, 1.0, 1.0],
+    "orientation_axis_angle": [0.0, 1.0, 0.0, 0.0],
+    "expected_classification": "C"
+  },
+  "simulation": {
+    "basic_timestep_ms": 32,
+    "timeout_steps": 600,
+    "network_required": false,
+    "gpu_required": false,
+    "float_tolerance": 1e-9
+  }
+}
